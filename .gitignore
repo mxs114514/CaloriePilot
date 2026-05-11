@@ -30,6 +30,10 @@ coverage
 
 .eslintcache
 
+# Project documents
+doc
+doc/
+
 # Cypress
 /cypress/videos/
 /cypress/screenshots/
