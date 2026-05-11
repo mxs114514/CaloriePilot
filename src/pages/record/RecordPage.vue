@@ -92,9 +92,7 @@ const chartOption = computed(() => ({
       <div class="record-page__chart">
         <VChart :option="chartOption" autoresize />
         <div class="record-page__chart-center">
-          <strong>{{ totalCalories }}</strong>
-          <span>/ {{ targetCalories }} kcal</span>
-          <em>{{ progressPercent }}%</em>
+          <em :class="{ 'is-over': progressPercent > 100 }">{{ progressPercent }}%</em>
         </div>
       </div>
     </section>
@@ -127,7 +125,7 @@ const chartOption = computed(() => ({
 
 .record-page__chart-center {
   position: absolute;
-  top: 42%;
+  top: 50%;
   left: 50%;
   display: flex;
   flex-direction: column;
@@ -135,26 +133,15 @@ const chartOption = computed(() => ({
   transform: translate(-50%, -50%);
 }
 
-.record-page__chart-center strong {
-  color: #111827;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 32px;
-}
-
-.record-page__chart-center span {
-  margin-top: 2px;
-  color: #6b7280;
-  font-size: 13px;
-  line-height: 18px;
-}
-
 .record-page__chart-center em {
-  margin-top: 6px;
   color: #10b981;
-  font-size: 14px;
+  font-size: 40px;
   font-style: normal;
-  font-weight: 600;
-  line-height: 20px;
+  font-weight: 800;
+  line-height: 24px;
+}
+
+.record-page__chart-center em.is-over {
+  color: #ef4444;
 }
 </style>
