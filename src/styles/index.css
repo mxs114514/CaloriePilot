@@ -12,6 +12,11 @@ body {
   min-height: 100%;
 }
 
+.page-shell {
+  min-height: 100vh;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom));
+}
+
 *,
 *::before,
 *::after {
