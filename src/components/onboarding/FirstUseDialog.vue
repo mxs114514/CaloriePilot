@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
-const router = useRouter()
+const showDialog = ref(true)
+const showActivityLevelPicker = ref(false)
+const activityLevelFieldValue = ref('')
 
 const form = reactive({
   activityLevel: '',
@@ -15,9 +16,6 @@ const form = reactive({
   planDuration: '',
   weightLossTarget: '',
 })
-
-const showActivityLevelPicker = ref(false)
-const activityLevelFieldValue = ref('')
 
 const activityLevelOptions = [
   { text: '久坐/极少运动', value: 'low' },
@@ -36,13 +34,21 @@ const handleActivityLevelConfirm = ({
 }
 
 const handleSubmit = () => {
-  router.push('/profile')
+  showDialog.value = false
 }
 </script>
 
 <template>
-  <main class="page-shell profile-edit-page">
-    <van-nav-bar title="修改个人信息" left-arrow @click-left="router.push('/profile')" />
+  <van-popup
+    v-model:show="showDialog"
+    class="first-use-dialog"
+    position="bottom"
+    round
+    :close-on-click-overlay="false"
+  >
+    <div class="first-use-dialog__header">
+      <h1 class="first-use-dialog__title">首次使用请输入您的信息</h1>
+    </div>
 
     <van-form @submit="handleSubmit">
       <van-cell-group title="基础信息" inset>
@@ -102,8 +108,8 @@ const handleSubmit = () => {
         />
       </van-cell-group>
 
-      <div class="profile-edit-page__actions">
-        <van-button type="primary" native-type="submit" block round>提交修改</van-button>
+      <div class="first-use-dialog__actions">
+        <van-button type="primary" native-type="submit" block round>提交信息</van-button>
       </div>
     </van-form>
 
@@ -115,15 +121,29 @@ const handleSubmit = () => {
         @cancel="showActivityLevelPicker = false"
       />
     </van-popup>
-  </main>
+  </van-popup>
 </template>
 
 <style scoped>
-.profile-edit-page {
-  background: #f7f8fa;
+.first-use-dialog {
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 18px 0 calc(18px + env(safe-area-inset-bottom));
 }
 
-.profile-edit-page__actions {
+.first-use-dialog__header {
+  padding: 0 16px 6px;
+}
+
+.first-use-dialog__title {
+  margin: 0;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.first-use-dialog__actions {
   padding: 24px 16px 0;
 }
 </style>
