@@ -1,13 +1,18 @@
 export type {
   ActivityLevel,
   CalorieRecord,
+  DailyMealCalories,
+  DailyMealCaloriesForm,
+  DateString,
+  DateTimeString,
   DietPreference,
   Gender,
   GoalPlan,
   MealType,
   PlanCheckin,
   PlanItem,
+  ProfileForm,
+  ProfilePlanProgress,
   UserProfile,
   WeightRecord,
 } from './models'
-
