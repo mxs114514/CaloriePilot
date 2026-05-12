@@ -3,21 +3,33 @@ import { PieChart } from 'echarts/charts'
 import { LegendComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { computed, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { computed, onMounted, reactive, ref } from 'vue'
 import VChart from 'vue-echarts'
+
+import {
+  addMealCalories,
+  getTodayMealCalories,
+  saveTodayMealCalories,
+} from '@/services/calorieRecords'
+import { useProfileStore } from '@/stores/profile'
+import type { DailyMealCalories, DailyMealCaloriesForm, MealType } from '@/types'
 
 use([CanvasRenderer, LegendComponent, PieChart, TooltipComponent])
 
-const targetCalories = 1800
+const profileStore = useProfileStore()
+const { activePlan } = storeToRefs(profileStore)
 
-const mealForm = reactive({
+const targetCalories = computed(() => activePlan.value?.dailyCalorieTarget ?? 0)
+
+const mealForm = reactive<DailyMealCaloriesForm>({
   breakfast: '',
   dinner: '',
   lunch: '',
   snack: '',
 })
 
-const confirmedMealForm = reactive({
+const confirmedMealForm = reactive<DailyMealCaloriesForm>({
   breakfast: '0',
   dinner: '0',
   lunch: '0',
@@ -25,6 +37,7 @@ const confirmedMealForm = reactive({
 })
 
 const isEditing = ref(false)
+const isSaving = ref(false)
 const showAddActionSheet = ref(false)
 const showCascader = ref(false)
 
@@ -50,32 +63,64 @@ const onCascaderFinish = ({ selectedOptions }: { selectedOptions: Array<{ value:
 
 const parseCalories = (value: string) => Number(value || 0)
 
-const toggleEdit = () => {
+const syncMealForms = (meals: DailyMealCalories) => {
+  mealForm.breakfast = String(meals.breakfast)
+  mealForm.lunch = String(meals.lunch)
+  mealForm.dinner = String(meals.dinner)
+  mealForm.snack = String(meals.snack)
+  confirmedMealForm.breakfast = String(meals.breakfast)
+  confirmedMealForm.lunch = String(meals.lunch)
+  confirmedMealForm.dinner = String(meals.dinner)
+  confirmedMealForm.snack = String(meals.snack)
+}
+
+const loadTodayMealCalories = async () => {
+  if (!activePlan.value) return
+
+  const meals = await getTodayMealCalories(activePlan.value.id)
+  syncMealForms(meals)
+}
+
+const toggleEdit = async () => {
   if (isEditing.value) {
-    isEditing.value = false
-    confirmedMealForm.breakfast = String(parseCalories(mealForm.breakfast))
-    confirmedMealForm.lunch = String(parseCalories(mealForm.lunch))
-    confirmedMealForm.dinner = String(parseCalories(mealForm.dinner))
-    confirmedMealForm.snack = String(parseCalories(mealForm.snack))
+    if (!activePlan.value) return
+
+    isSaving.value = true
+    try {
+      const meals = await saveTodayMealCalories(activePlan.value.id, {
+        breakfast: parseCalories(mealForm.breakfast),
+        dinner: parseCalories(mealForm.dinner),
+        lunch: parseCalories(mealForm.lunch),
+        snack: parseCalories(mealForm.snack),
+      })
+
+      syncMealForms(meals)
+      isEditing.value = false
+    } finally {
+      isSaving.value = false
+    }
   } else {
     isEditing.value = true
   }
 }
 
-const onAddConfirm = () => {
-  if (!addForm.mealType || !addForm.calories) return
-  const type = addForm.mealType as keyof typeof mealForm
+const onAddConfirm = async () => {
+  if (!activePlan.value || !addForm.mealType || !addForm.calories) return
+
+  const type = addForm.mealType as MealType
   const addCals = parseCalories(addForm.calories)
 
-  const currentCals = parseCalories(mealForm[type])
-  const newCals = currentCals + addCals
+  isSaving.value = true
+  try {
+    const meals = await addMealCalories(activePlan.value.id, type, addCals)
+    syncMealForms(meals)
 
-  mealForm[type] = String(newCals)
-  confirmedMealForm[type] = String(newCals)
-
-  showAddActionSheet.value = false
-  addForm.mealType = ''
-  addForm.calories = ''
+    showAddActionSheet.value = false
+    addForm.mealType = ''
+    addForm.calories = ''
+  } finally {
+    isSaving.value = false
+  }
 }
 
 const mealCalories = computed(() => ({
@@ -95,11 +140,11 @@ const totalCalories = computed(() => {
 })
 
 const progressPercent = computed(() => {
-  if (targetCalories <= 0) {
+  if (targetCalories.value <= 0) {
     return 0
   }
 
-  return Math.round((totalCalories.value / targetCalories) * 100)
+  return Math.round((totalCalories.value / targetCalories.value) * 100)
 })
 
 const chartData = computed(() => {
@@ -110,14 +155,14 @@ const chartData = computed(() => {
     { itemStyle: { color: '#BFDBFE' }, name: '加餐/零食', value: mealCalories.value.snack },
   ]
 
-  const remainingCalories = Math.max(targetCalories - totalCalories.value, 0)
+  const remainingCalories = Math.max(targetCalories.value - totalCalories.value, 0)
 
   return [
     ...meals,
     {
       itemStyle: { color: '#E5E7EB' },
       name: '剩余目标',
-      value: totalCalories.value === 0 ? targetCalories : remainingCalories,
+      value: totalCalories.value === 0 ? targetCalories.value : remainingCalories,
     },
   ]
 })
@@ -143,6 +188,14 @@ const chartOption = computed(() => ({
     trigger: 'item',
   },
 }))
+
+onMounted(async () => {
+  if (!profileStore.isInitialized) {
+    await profileStore.loadInitialData()
+  }
+
+  await loadTodayMealCalories()
+})
 </script>
 
 <template>
@@ -168,22 +221,24 @@ const chartOption = computed(() => ({
         <van-button
           round
           block
-          :type="isEditing ? 'success' : 'primary'"
-          :plain="!isEditing"
+          type="primary"
           class="action-btn"
-          @click="toggleEdit"
+          :disabled="isEditing || !activePlan || isSaving"
+          @click="showAddActionSheet = true"
         >
-          {{ isEditing ? '完成修改' : '修改' }}
+          添加
         </van-button>
         <van-button
           round
           block
-          type="primary"
+          :type="isEditing ? 'success' : 'primary'"
+          :plain="!isEditing"
           class="action-btn"
-          :disabled="isEditing"
-          @click="showAddActionSheet = true"
+          :disabled="!activePlan"
+          :loading="isSaving && isEditing"
+          @click="toggleEdit"
         >
-          添加
+          {{ isEditing ? '完成修改' : '修改' }}
         </van-button>
       </div>
     </van-form>
@@ -219,7 +274,9 @@ const chartOption = computed(() => ({
           placeholder="请输入热量"
         />
         <div class="record-page__sheet-actions">
-          <van-button round block type="primary" @click="onAddConfirm">确认添加</van-button>
+          <van-button round block type="primary" :loading="isSaving" @click="onAddConfirm">
+            确认添加
+          </van-button>
         </div>
       </div>
     </van-action-sheet>

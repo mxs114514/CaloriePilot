@@ -30,6 +30,8 @@ export type DietPreference = string
  */
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
+export type PlanStatus = 'active' | 'archived' | 'completed'
+
 /**
  * YYYY-MM-DD 格式日期字符串
  */
@@ -81,6 +83,8 @@ export interface GoalPlan {
   weightLossTargetKg: number
   /** 系统计算出的每日目标摄入热量，单位：kcal */
   dailyCalorieTarget: number
+  /** 计划状态 */
+  status: PlanStatus
   createdAt: DateTimeString
   updatedAt: DateTimeString
 }
@@ -112,6 +116,8 @@ export interface DailyMealCalories {
  */
 export interface CalorieRecord {
   id: string
+  /** 所属计划 ID */
+  planId: string
   /** 记录日期 */
   date: DateString
   mealType: MealType
@@ -126,6 +132,8 @@ export interface CalorieRecord {
  */
 export interface WeightRecord {
   id: string
+  /** 所属计划 ID */
+  planId: string
   /** 记录日期 */
   date: DateString
   /** 体重，单位：千克；展示时保留两位小数 */

@@ -11,6 +11,7 @@ export type {
   MealType,
   PlanCheckin,
   PlanItem,
+  PlanStatus,
   ProfileForm,
   ProfilePlanProgress,
   UserProfile,

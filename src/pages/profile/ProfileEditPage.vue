@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { reactive, ref, computed } from 'vue'
+import { storeToRefs } from 'pinia'
+import { showFailToast, showSuccessToast } from 'vant'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { showFailToast } from 'vant'
 
-import type { ActivityLevel, Gender } from '@/types'
+import { useProfileStore } from '@/stores/profile'
+import type { ActivityLevel, Gender, ProfileForm } from '@/types'
 import {
   calculateBmi,
   calculateDailyCalorieTarget,
@@ -12,8 +14,10 @@ import {
 } from '@/utils/healthCalculations'
 
 const router = useRouter()
+const profileStore = useProfileStore()
+const { activePlan, profile } = storeToRefs(profileStore)
 
-const form = reactive({
+const form = reactive<ProfileForm>({
   activityLevel: '',
   age: '',
   currentWeightKg: '',
@@ -28,6 +32,7 @@ const form = reactive({
 const showActivityLevelPicker = ref(false)
 const activityLevelFieldValue = ref('')
 const bmiDisplay = ref('--')
+const isSubmitting = ref(false)
 
 const activityLevelOptions = [
   { text: '久坐不动（办公室工作，几乎不运动）', value: 'sedentary' },
@@ -63,7 +68,8 @@ const handleActivityLevelConfirm = ({
   selectedOptions: { text: string; value: string }[]
 }) => {
   activityLevelFieldValue.value = selectedOptions[0]?.text ?? ''
-  form.activityLevel = selectedOptions[0]?.value ?? ''
+  const selectedValue = selectedOptions[0]?.value ?? ''
+  form.activityLevel = isActivityLevel(selectedValue) ? selectedValue : ''
   showActivityLevelPicker.value = false
 }
 
@@ -100,7 +106,7 @@ const healthCheckResult = computed(() => {
     return { isComplete: false, underSafeMinimum: false }
   }
 
-  const { underSafeMinimum, dailyDeficit } = calculateDailyCalorieTarget({
+  const { dailyDeficit, rawDailyTarget, underSafeMinimum } = calculateDailyCalorieTarget({
     activityLevel: form.activityLevel,
     age,
     gender: form.gender,
@@ -110,11 +116,12 @@ const healthCheckResult = computed(() => {
     weightLossTargetKg,
   })
 
-  return { isComplete: true, underSafeMinimum, dailyDeficit }
+  return { dailyDeficit, isComplete: true, rawDailyTarget, underSafeMinimum }
 })
 
 const isSubmitDisabled = computed(() => {
   const isBaseInfoComplete = !!form.name && healthCheckResult.value.isComplete
+
   return !isBaseInfoComplete || healthCheckResult.value.underSafeMinimum
 })
 
@@ -122,9 +129,19 @@ const deficitDisplay = computed(() => {
   if (!healthCheckResult.value.isComplete || healthCheckResult.value.dailyDeficit === undefined) {
     return '--'
   }
+
   const deficit = roundTo(healthCheckResult.value.dailyDeficit, 0)
   const evalText = healthCheckResult.value.underSafeMinimum ? '不健康' : '健康'
+
   return `${deficit} kcal（${evalText}）`
+})
+
+const dailyTargetDisplay = computed(() => {
+  if (!healthCheckResult.value.isComplete || healthCheckResult.value.rawDailyTarget === undefined) {
+    return '--'
+  }
+
+  return `${roundTo(healthCheckResult.value.rawDailyTarget, 0)} kcal`
 })
 
 const checkDailyCalorieDeficitHealth = () => {
@@ -138,16 +155,52 @@ const handleBodyMetricBlur = () => {
   checkDailyCalorieDeficitHealth()
 }
 
-const handleSubmit = () => {
-  router.push('/profile')
+const fillForm = () => {
+  if (!profile.value || !activePlan.value) return
+
+  form.activityLevel = profile.value.activityLevel
+  form.age = String(profile.value.age)
+  form.currentWeightKg = String(profile.value.currentWeightKg)
+  form.dietPreference = profile.value.dietPreference
+  form.gender = profile.value.gender
+  form.heightCm = String(profile.value.heightCm)
+  form.name = profile.value.name
+  form.planDuration = String(activePlan.value.durationDays)
+  form.weightLossTarget = String(activePlan.value.weightLossTargetKg)
+  activityLevelFieldValue.value =
+    activityLevelOptions.find(option => option.value === profile.value?.activityLevel)?.text ?? ''
+  updateBmiDisplay()
 }
+
+const handleSubmit = async () => {
+  try {
+    isSubmitting.value = true
+    await profileStore.updateProfileAndPlan(form)
+    showSuccessToast('修改已保存')
+    router.push('/profile')
+  } catch {
+    showFailToast('保存失败，请检查填写内容')
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+onMounted(async () => {
+  if (!profileStore.isInitialized) {
+    await profileStore.loadInitialData()
+  }
+
+  fillForm()
+})
 </script>
 
 <template>
   <main class="page-shell profile-edit-page">
     <van-nav-bar title="修改个人信息" left-arrow @click-left="router.push('/profile')" />
 
-    <van-form @submit="handleSubmit">
+    <van-empty v-if="profileStore.isInitialized && (!profile || !activePlan)" description="暂无可编辑的信息" />
+
+    <van-form v-else @submit="handleSubmit">
       <van-cell-group title="基础信息" inset>
         <van-field v-model="form.name" label="姓名" maxlength="20" placeholder="请输入姓名" />
         <van-field label="性别">
@@ -193,7 +246,7 @@ const handleSubmit = () => {
           label="饮食习惯"
           type="textarea"
           maxlength="50"
-          placeholder="请输入饮食习惯,比如喜欢吃清淡/喜欢吃辣/喜欢吃甜食等，还有忌口的食物等"
+          placeholder="请输入饮食习惯，比如喜欢清淡/喜欢吃辣/忌口食物等"
           show-word-limit
         />
         <van-field
@@ -224,13 +277,23 @@ const handleSubmit = () => {
           @blur="checkDailyCalorieDeficitHealth"
         />
         <van-field label="热量缺口" :model-value="deficitDisplay" readonly />
+        <van-field label="每日理论摄入" :model-value="dailyTargetDisplay" readonly />
         <div class="health-hint">
-          * 热量缺口不宜过大，需确保每天吃够维持基本身体机能的最低热量。
+          * 健康的计划建议为每周减重 0.5～1 kg,不易反弹并且伤害小。
         </div>
       </van-cell-group>
 
       <div class="profile-edit-page__actions">
-        <van-button type="primary" native-type="submit" block round :disabled="isSubmitDisabled">提交修改</van-button>
+        <van-button
+          type="primary"
+          native-type="submit"
+          block
+          round
+          :disabled="isSubmitDisabled"
+          :loading="isSubmitting"
+        >
+          提交修改
+        </van-button>
       </div>
     </van-form>
 

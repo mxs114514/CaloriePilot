@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
-import { showFailToast } from 'vant'
+import { showFailToast, showSuccessToast } from 'vant'
 
-import type { ActivityLevel, Gender } from '@/types'
+import { useProfileStore } from '@/stores/profile'
+import type { ActivityLevel, Gender, ProfileForm } from '@/types'
 import {
   calculateBmi,
   calculateDailyCalorieTarget,
@@ -14,8 +15,10 @@ const showDialog = ref(true)
 const showActivityLevelPicker = ref(false)
 const activityLevelFieldValue = ref('')
 const bmiDisplay = ref('--')
+const isSubmitting = ref(false)
+const profileStore = useProfileStore()
 
-const form = reactive({
+const form = reactive<ProfileForm>({
   activityLevel: '',
   age: '',
   currentWeightKg: '',
@@ -61,7 +64,8 @@ const handleActivityLevelConfirm = ({
   selectedOptions: { text: string; value: string }[]
 }) => {
   activityLevelFieldValue.value = selectedOptions[0]?.text ?? ''
-  form.activityLevel = selectedOptions[0]?.value ?? ''
+  const selectedValue = selectedOptions[0]?.value ?? ''
+  form.activityLevel = isActivityLevel(selectedValue) ? selectedValue : ''
   showActivityLevelPicker.value = false
 }
 
@@ -98,7 +102,7 @@ const healthCheckResult = computed(() => {
     return { isComplete: false, underSafeMinimum: false }
   }
 
-  const { underSafeMinimum, dailyDeficit } = calculateDailyCalorieTarget({
+  const { dailyDeficit, rawDailyTarget, underSafeMinimum } = calculateDailyCalorieTarget({
     activityLevel: form.activityLevel,
     age,
     gender: form.gender,
@@ -108,7 +112,7 @@ const healthCheckResult = computed(() => {
     weightLossTargetKg,
   })
 
-  return { isComplete: true, underSafeMinimum, dailyDeficit }
+  return { dailyDeficit, isComplete: true, rawDailyTarget, underSafeMinimum }
 })
 
 const isSubmitDisabled = computed(() => {
@@ -125,6 +129,14 @@ const deficitDisplay = computed(() => {
   return `${deficit} kcal（${evalText}）`
 })
 
+const dailyTargetDisplay = computed(() => {
+  if (!healthCheckResult.value.isComplete || healthCheckResult.value.rawDailyTarget === undefined) {
+    return '--'
+  }
+
+  return `${roundTo(healthCheckResult.value.rawDailyTarget, 0)} kcal`
+})
+
 const checkDailyCalorieDeficitHealth = () => {
   if (healthCheckResult.value.isComplete && healthCheckResult.value.underSafeMinimum) {
     showFailToast('每日热量缺口过大，建议延长计划或降低减重目标')
@@ -136,8 +148,17 @@ const handleBodyMetricBlur = () => {
   checkDailyCalorieDeficitHealth()
 }
 
-const handleSubmit = () => {
-  showDialog.value = false
+const handleSubmit = async () => {
+  try {
+    isSubmitting.value = true
+    await profileStore.createProfileAndPlan(form)
+    showSuccessToast('信息已保存')
+    showDialog.value = false
+  } catch {
+    showFailToast('保存失败，请检查填写内容')
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -231,13 +252,23 @@ const handleSubmit = () => {
           @blur="checkDailyCalorieDeficitHealth"
         />
         <van-field label="热量缺口" :model-value="deficitDisplay" readonly />
+        <van-field label="每日理论摄入" :model-value="dailyTargetDisplay" readonly />
         <div class="health-hint">
-          * 热量缺口不宜过大，需确保每天吃够维持基本身体机能的最低热量。
+          * 健康的计划建议为每周减重 0.5～1 kg,不易反弹并且伤害小。
         </div>
       </van-cell-group>
 
       <div class="first-use-dialog__actions">
-        <van-button type="primary" native-type="submit" block round :disabled="isSubmitDisabled">提交信息</van-button>
+        <van-button
+          type="primary"
+          native-type="submit"
+          block
+          round
+          :disabled="isSubmitDisabled"
+          :loading="isSubmitting"
+        >
+          提交信息
+        </van-button>
       </div>
     </van-form>
 
