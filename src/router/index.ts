@@ -23,6 +23,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/history/HistoryPage.vue'),
   },
   {
+    path: '/ai-chat',
+    name: 'ai-chat',
+    component: () => import('@/pages/ai-chat/AiChatPage.vue'),
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/pages/profile/ProfilePage.vue'),
