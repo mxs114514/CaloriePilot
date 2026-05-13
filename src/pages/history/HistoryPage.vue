@@ -90,10 +90,9 @@ onMounted(() => {
 
 <template>
   <main class="page-shell history-page">
-    <header class="history-page__header">
-      <h1>当前计划历史</h1>
-      <p v-if="activePlan">{{ rangeText }}</p>
-    </header>
+    <section v-if="activePlan" class="history-page__summary">
+      <p>{{ rangeText }}</p>
+    </section>
 
     <van-skeleton v-if="isLoading" title :row="4" class="history-page__skeleton" />
 
@@ -132,23 +131,15 @@ onMounted(() => {
 <style scoped>
 .history-page {
   background: #f7f8fa;
-  padding: 18px 16px calc(66px + env(safe-area-inset-bottom));
+  padding: 18px 16px 100px;
 }
 
-.history-page__header {
+.history-page__summary {
   margin-bottom: 16px;
 }
 
-.history-page__header h1 {
+.history-page__summary p {
   margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.history-page__header p {
-  margin: 6px 0 0;
   color: #6b7280;
   font-size: 13px;
   line-height: 1.5;

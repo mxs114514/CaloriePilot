@@ -160,7 +160,7 @@ export interface ProfileForm {
 }
 
 /**
- * 个人中心计划展示数据。
+ * 我的计划展示数据。
  */
 export interface ProfilePlanProgress {
   /** 当前第几天 */

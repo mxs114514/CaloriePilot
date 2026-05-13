@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { ActivityLevel, Gender, ProfileForm } from '@/types'
+
 import { storeToRefs } from 'pinia'
 import { showFailToast, showSuccessToast } from 'vant'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useProfileStore } from '@/stores/profile'
-import type { ActivityLevel, Gender, ProfileForm } from '@/types'
 import {
   calculateBmi,
   calculateDailyCalorieTarget,
@@ -196,8 +197,6 @@ onMounted(async () => {
 
 <template>
   <main class="page-shell profile-edit-page">
-    <van-nav-bar title="修改个人信息" left-arrow @click-left="router.push('/profile')" />
-
     <van-empty v-if="profileStore.isInitialized && (!profile || !activePlan)" description="暂无可编辑的信息" />
 
     <van-form v-else @submit="handleSubmit">

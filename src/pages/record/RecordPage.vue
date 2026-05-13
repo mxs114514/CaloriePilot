@@ -218,12 +218,13 @@ const chartOption = computed(() => ({
   },
   series: [
     {
+      center: ['50%', '40%'],
       avoidLabelOverlap: true,
       data: chartData.value,
       label: {
         show: false,
       },
-      radius: ['62%', '82%'],
+      radius: ['60%', '80%'],
       type: 'pie',
     },
   ],
@@ -371,7 +372,7 @@ onMounted(async () => {
 
 .record-page__chart-center {
   position: absolute;
-  top: 50%;
+  top: 40%;
   left: 50%;
   display: flex;
   flex-direction: column;

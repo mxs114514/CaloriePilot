@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { showToast } from 'vant'
 
+import { ROUTE_PAGE_TITLES } from '@/router/pageTitles'
+
 const showDevelopingToast = () => {
   showToast({
     icon: 'warning-o',
@@ -12,14 +14,13 @@ const showDevelopingToast = () => {
 <template>
   <div class="tabbar-container">
     <van-tabbar class="app-tabbar" route safe-area-inset-bottom :fixed="false">
-      <van-tabbar-item replace to="/record" icon="records-o">记录</van-tabbar-item>
-      <van-tabbar-item icon="todo-list-o" @click="showDevelopingToast">计划清单</van-tabbar-item>
-      <van-tabbar-item replace to="/history" icon="chart-trending-o">历史</van-tabbar-item>
-      <van-tabbar-item replace to="/profile" icon="user-o">个人中心</van-tabbar-item>
+      <van-tabbar-item replace to="/record" icon="records-o">{{ ROUTE_PAGE_TITLES.record }}</van-tabbar-item>
+      <van-tabbar-item icon="todo-list-o" @click="showDevelopingToast">{{ ROUTE_PAGE_TITLES.plan }}</van-tabbar-item>
+      <van-tabbar-item replace to="/history" icon="chart-trending-o">{{ ROUTE_PAGE_TITLES.history }}</van-tabbar-item>
+      <van-tabbar-item replace to="/profile" icon="user-o">{{ ROUTE_PAGE_TITLES.profile }}</van-tabbar-item>
     </van-tabbar>
 
-    <!-- ai对话-->
-    <button type="button" class="fab" aria-label="AI 对话" @click="showDevelopingToast">
+    <button type="button" class="fab" :aria-label="ROUTE_PAGE_TITLES['ai-chat']" @click="showDevelopingToast">
       <van-icon name="chat-o" size="26" color="#fff" />
     </button>
   </div>
