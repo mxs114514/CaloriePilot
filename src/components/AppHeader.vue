@@ -37,7 +37,7 @@ const handleBack = () => {
             height="40"
             fit="cover"
             src="/favicon.svg"
-            alt="莫莫今天吃什么 Logo"
+            alt="莫今天吃什么 Logo"
           />
           <span class="app-header__app-name">{{ APP_NAME }}</span>
         </div>

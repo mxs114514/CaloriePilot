@@ -1,0 +1,66 @@
+name: Deploy Website
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build website
+        run: pnpm build
+
+      - name: Pack dist
+        run: tar -czf dist.tar.gz -C dist .
+
+      - name: Upload package to Lighthouse
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.LIGHTHOUSE_HOST }}
+          username: ${{ secrets.LIGHTHOUSE_USER }}
+          key: ${{ secrets.LIGHTHOUSE_SSH_KEY }}
+          port: ${{ secrets.LIGHTHOUSE_PORT }}
+          source: dist.tar.gz
+          target: /tmp
+
+      - name: Deploy on Lighthouse
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.LIGHTHOUSE_HOST }}
+          username: ${{ secrets.LIGHTHOUSE_USER }}
+          key: ${{ secrets.LIGHTHOUSE_SSH_KEY }}
+          port: ${{ secrets.LIGHTHOUSE_PORT }}
+          script: |
+            mv /tmp/dist.tar.gz /tmp/calorie-${{ github.sha }}.tar.gz
+            /opt/1panel/www/sites/calorie/deploy.sh /tmp/calorie-${{ github.sha }}.tar.gz ${{ github.sha }}

@@ -29,6 +29,6 @@ describe('page title metadata', () => {
   })
 
   it('exposes the application name for the shared banner', () => {
-    expect(APP_NAME).toBe('莫莫今天吃什么')
+    expect(APP_NAME).toBe('莫今天吃什么')
   })
 })

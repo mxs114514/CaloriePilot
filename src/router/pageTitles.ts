@@ -1,4 +1,4 @@
-export const APP_NAME = '莫莫今天吃什么'
+export const APP_NAME = '莫今天吃什么'
 
 export const ROUTE_PAGE_TITLES = {
   'ai-chat': 'AI 对话',
