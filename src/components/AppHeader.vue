@@ -89,14 +89,13 @@ const handleBack = () => {
 .app-header__page-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .app-header__app-name {
-  max-width: 180px;
   color: #111827;
   font-size: 16px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .app-header__page {
@@ -119,8 +118,11 @@ const handleBack = () => {
   height: 60px;
 }
 
-.app-header :deep(.van-nav-bar__left),
+.app-header :deep(.van-nav-bar__left) {
+  max-width: 65%;
+}
+
 .app-header :deep(.van-nav-bar__right) {
-  max-width: calc(50% - 12px);
+  max-width: 35%;
 }
 </style>
