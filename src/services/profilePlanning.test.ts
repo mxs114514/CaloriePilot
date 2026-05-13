@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
-
 import type { ProfileForm } from '@/types'
 
-import { buildProfileAndPlan, updateProfileAndPlan } from './profilePlanning'
+import { describe, expect, it } from 'vitest'
+
+import { buildProfileAndPlan, updateProfileAndPlan, updateProfileCurrentWeight } from './profilePlanning'
 
 describe('profile planning service', () => {
   const form: ProfileForm = {
@@ -81,5 +81,26 @@ describe('profile planning service', () => {
     expect(updated.plan.status).toBe('active')
     expect(updated.profile.updatedAt).toBe('2026-05-13T10:00:00.000Z')
     expect(updated.plan.updatedAt).toBe('2026-05-13T10:00:00.000Z')
+  })
+
+  it('updates only current weight metrics for a daily weight record', () => {
+    const created = buildProfileAndPlan(form, {
+      createId: () => 'fixed-id',
+      getToday: () => '2026-05-12',
+      getNow: () => '2026-05-12T10:00:00.000Z',
+    })
+
+    const updatedProfile = updateProfileCurrentWeight(created.profile, 68.5, {
+      getNow: () => '2026-05-13T10:00:00.000Z',
+    })
+
+    expect(updatedProfile).toMatchObject({
+      id: created.profile.id,
+      currentWeightKg: 68.5,
+      updatedAt: '2026-05-13T10:00:00.000Z',
+    })
+    expect(updatedProfile.bmi).toBeCloseTo(22.37, 2)
+    expect(updatedProfile.tdee).toBe(created.profile.tdee)
+    expect(updatedProfile.dailyCalorieTarget).toBe(created.profile.dailyCalorieTarget)
   })
 })

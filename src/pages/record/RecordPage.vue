@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import type { DailyMealCalories, DailyMealCaloriesForm, MealType } from '@/types'
+
 import { PieChart } from 'echarts/charts'
 import { LegendComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { storeToRefs } from 'pinia'
+import { showFailToast, showSuccessToast } from 'vant'
 import { computed, onMounted, reactive, ref } from 'vue'
 import VChart from 'vue-echarts'
 
@@ -12,13 +15,13 @@ import {
   getTodayMealCalories,
   saveTodayMealCalories,
 } from '@/services/calorieRecords'
+import { getTodayWeightRecord } from '@/services/weightRecords'
 import { useProfileStore } from '@/stores/profile'
-import type { DailyMealCalories, DailyMealCaloriesForm, MealType } from '@/types'
 
 use([CanvasRenderer, LegendComponent, PieChart, TooltipComponent])
 
 const profileStore = useProfileStore()
-const { activePlan } = storeToRefs(profileStore)
+const { activePlan, profile } = storeToRefs(profileStore)
 
 const targetCalories = computed(() => activePlan.value?.dailyCalorieTarget ?? 0)
 
@@ -27,6 +30,10 @@ const mealForm = reactive<DailyMealCaloriesForm>({
   dinner: '',
   lunch: '',
   snack: '',
+})
+
+const weightForm = reactive({
+  weight: '',
 })
 
 const confirmedMealForm = reactive<DailyMealCaloriesForm>({
@@ -38,6 +45,8 @@ const confirmedMealForm = reactive<DailyMealCaloriesForm>({
 
 const isEditing = ref(false)
 const isSaving = ref(false)
+const isWeightEditing = ref(false)
+const isWeightSaving = ref(false)
 const showAddActionSheet = ref(false)
 const showCascader = ref(false)
 
@@ -62,6 +71,7 @@ const onCascaderFinish = ({ selectedOptions }: { selectedOptions: Array<{ value:
 }
 
 const parseCalories = (value: string) => Number(value || 0)
+const parseWeight = (value: string) => Number(value || 0)
 
 const syncMealForms = (meals: DailyMealCalories) => {
   mealForm.breakfast = String(meals.breakfast)
@@ -79,6 +89,13 @@ const loadTodayMealCalories = async () => {
 
   const meals = await getTodayMealCalories(activePlan.value.id)
   syncMealForms(meals)
+}
+
+const loadTodayWeight = async () => {
+  if (!activePlan.value) return
+
+  const record = await getTodayWeightRecord(activePlan.value.id)
+  weightForm.weight = String(record?.weightKg ?? profile.value?.currentWeightKg ?? '')
 }
 
 const toggleEdit = async () => {
@@ -101,6 +118,33 @@ const toggleEdit = async () => {
     }
   } else {
     isEditing.value = true
+  }
+}
+
+const toggleWeightEdit = async () => {
+  if (!isWeightEditing.value) {
+    isWeightEditing.value = true
+    return
+  }
+
+  const weightKg = parseWeight(weightForm.weight)
+
+  if (!profile.value || !activePlan.value || weightKg <= 0) {
+    showFailToast('请输入有效体重')
+    return
+  }
+
+  isWeightSaving.value = true
+  try {
+    await profileStore.saveTodayWeight(weightKg)
+    weightForm.weight = String(profile.value?.currentWeightKg ?? weightKg)
+    isWeightEditing.value = false
+    showSuccessToast('体重已保存')
+  } catch (error) {
+    console.error('Failed to save today weight', error)
+    showFailToast('保存失败，请检查体重')
+  } finally {
+    isWeightSaving.value = false
   }
 }
 
@@ -195,6 +239,7 @@ onMounted(async () => {
   }
 
   await loadTodayMealCalories()
+  await loadTodayWeight()
 })
 </script>
 
@@ -241,6 +286,31 @@ onMounted(async () => {
           {{ isEditing ? '完成修改' : '修改' }}
         </van-button>
       </div>
+    </van-form>
+
+    <van-form class="record-page__weight-form">
+      <van-cell-group title="今日体重" inset>
+        <van-field
+          v-model="weightForm.weight"
+          label="体重"
+          type="number"
+          placeholder="请输入体重"
+          :readonly="!isWeightEditing"
+        >
+          <template #button>
+            <van-button
+              size="small"
+              type="primary"
+              plain
+              :loading="isWeightSaving"
+              :disabled="!activePlan || !profile"
+              @click="toggleWeightEdit"
+            >
+              {{ isWeightEditing ? '确认' : '修改' }}
+            </van-button>
+          </template>
+        </van-field>
+      </van-cell-group>
     </van-form>
 
     <van-action-sheet v-model:show="showAddActionSheet" title="添加饮食热量">
@@ -330,6 +400,10 @@ onMounted(async () => {
 
 .action-btn {
   flex: 1;
+}
+
+.record-page__weight-form {
+  margin-top: 8px;
 }
 
 .record-page__sheet-content {

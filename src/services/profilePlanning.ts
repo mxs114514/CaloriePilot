@@ -103,6 +103,23 @@ export const updateProfileAndPlan = (
   }
 }
 
+export const updateProfileCurrentWeight = (
+  profile: UserProfile,
+  currentWeightKg: number,
+  runtime: Pick<ProfilePlanningRuntime, 'getNow'> = {},
+): UserProfile => {
+  if (!Number.isFinite(currentWeightKg) || currentWeightKg <= 0) {
+    throw new RangeError('currentWeightKg must be greater than 0')
+  }
+
+  return {
+    ...profile,
+    bmi: roundTo(calculateBmi(currentWeightKg, profile.heightCm), 2),
+    currentWeightKg,
+    updatedAt: getNow(runtime),
+  }
+}
+
 interface ParsedProfileForm {
   activityLevel: Exclude<ProfileForm['activityLevel'], ''>
   age: number

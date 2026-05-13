@@ -1,13 +1,13 @@
 <script setup lang="ts">
+import type { ActivityLevel, Gender } from '@/types'
+
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useProfileStore } from '@/stores/profile'
-import type { ActivityLevel, Gender } from '@/types'
 import {
   calculateDailyCalorieDeficit,
-  calculateDailyCalorieTarget,
   roundTo,
 } from '@/utils/healthCalculations'
 
@@ -56,19 +56,9 @@ const calorieDeficitDisplay = computed(() => {
 })
 
 const theoreticalDailyIntakeDisplay = computed(() => {
-  if (!profile.value || !activePlan.value) return '--'
+  if (!activePlan.value) return '--'
 
-  const { rawDailyTarget } = calculateDailyCalorieTarget({
-    activityLevel: profile.value.activityLevel,
-    age: profile.value.age,
-    gender: profile.value.gender,
-    heightCm: profile.value.heightCm,
-    planDurationDays: activePlan.value.durationDays,
-    weightKg: profile.value.currentWeightKg,
-    weightLossTargetKg: activePlan.value.weightLossTargetKg,
-  })
-
-  return formatCalories(roundTo(rawDailyTarget, 0))
+  return formatCalories(activePlan.value.dailyCalorieTarget)
 })
 </script>
 

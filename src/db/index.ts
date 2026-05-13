@@ -1,5 +1,3 @@
-import Dexie, { type Table } from 'dexie'
-
 import type {
   CalorieRecord,
   GoalPlan,
@@ -8,6 +6,8 @@ import type {
   UserProfile,
   WeightRecord,
 } from '@/types'
+
+import Dexie, { type Table } from 'dexie'
 
 class CaloriePilotDatabase extends Dexie {
   calorieRecords!: Table<CalorieRecord, string>
@@ -21,6 +21,14 @@ class CaloriePilotDatabase extends Dexie {
     super('CaloriePilot')
 
     this.version(1).stores({
+      calorieRecords: 'id, planId, date',
+      goalPlans: 'id, status, createdAt',
+      planCheckins: 'id, planItemId, date',
+      planItems: 'id, createdAt',
+      profiles: 'id, createdAt',
+    })
+
+    this.version(2).stores({
       calorieRecords: 'id, planId, date',
       goalPlans: 'id, status, createdAt',
       planCheckins: 'id, planItemId, date',

@@ -1,8 +1,10 @@
+import type { GoalPlan, ProfileForm, UserProfile } from '@/types'
+
 import { defineStore } from 'pinia'
 
 import { getActivePlan, getCurrentProfile, replaceActivePlan, saveProfileAndPlan } from '@/db'
 import { buildProfileAndPlan, updateProfileAndPlan } from '@/services/profilePlanning'
-import type { GoalPlan, ProfileForm, UserProfile } from '@/types'
+import { saveTodayWeightRecord } from '@/services/weightRecords'
 
 export const useProfileStore = defineStore('profile', {
   actions: {
@@ -21,6 +23,20 @@ export const useProfileStore = defineStore('profile', {
       this.profile = profile ?? null
       this.activePlan = activePlan ?? null
       this.isInitialized = true
+    },
+
+    async saveTodayWeight(weightKg: number) {
+      if (!this.profile || !this.activePlan) {
+        throw new Error('Profile and active plan must exist before saving weight')
+      }
+
+      const { profile } = await saveTodayWeightRecord(
+        this.profile,
+        this.activePlan.id,
+        weightKg,
+      )
+
+      this.profile = profile
     },
 
     async updateProfileAndPlan(form: ProfileForm) {
