@@ -9,13 +9,31 @@ export default defineConfig({
     vue(),
     vueDevTools(),
     VitePWA({
+      includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-96x96.png', 'apple-touch-icon.png'],
       registerType: 'autoUpdate',
       manifest: {
-        name: 'CaloriePilot',
-        short_name: 'CaloriePilot',
-        start_url: '/',
-        display: 'standalone',
         background_color: '#ffffff',
+        description: '一个帮助你轻松记录每日热量摄入和体重变化的工具，助你实现健康目标。',
+        display: 'standalone',
+        icons: [
+          {
+            purpose: 'any maskable',
+            sizes: '192x192',
+            src: '/web-app-manifest-192x192.png',
+            type: 'image/png',
+          },
+          {
+            purpose: 'any maskable',
+            sizes: '512x512',
+            src: '/web-app-manifest-512x512.png',
+            type: 'image/png',
+          },
+        ],
+        name: 'CaloriePilot',
+        orientation: 'portrait',
+        scope: '/',
+        short_name: 'Calorie',
+        start_url: '/',
         theme_color: '#ffffff',
       },
     }),
@@ -26,8 +44,8 @@ export default defineConfig({
     },
   },
   server: {
-    host: '0.0.0.0', // 允许局域网访问
-    port: 5173, // 默认端口
-    open: true, // 自动打开浏览器
+    host: '0.0.0.0',
+    open: true,
+    port: 5173,
   },
 })
