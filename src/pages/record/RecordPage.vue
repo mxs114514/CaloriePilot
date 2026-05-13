@@ -246,14 +246,14 @@ onMounted(async () => {
 
 <template>
   <main class="page-shell record-page">
-    <section class="record-page__chart-section">
+    <!-- <section class="record-page__chart-section">
       <div class="record-page__chart">
         <VChart :option="chartOption" autoresize />
         <div class="record-page__chart-center">
           <em :class="{ 'is-over': progressPercent > 100 }">{{ progressPercent }}%</em>
         </div>
       </div>
-    </section>
+    </section> -->
 
     <van-form>
       <van-cell-group title="今日摄入" inset>
