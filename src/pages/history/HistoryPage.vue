@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import type { DailyPlanHistoryItem } from '@/utils/planHistory'
 
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
+import VChart from 'vue-echarts'
 
 import { getCurrentPlanHistory } from '@/services/planHistory'
 import { useProfileStore } from '@/stores/profile'
 import { getActivePlanHistoryRange } from '@/utils/planHistory'
+
+import { buildHistoryLineChartOption, getHistoryChartMinWidth } from './historyCharts'
+
+use([CanvasRenderer, GridComponent, LineChart, TooltipComponent])
 
 const profileStore = useProfileStore()
 const { activePlan } = storeToRefs(profileStore)
@@ -16,6 +25,7 @@ const isLoading = ref(false)
 const loadError = ref('')
 
 const hasCurrentPlan = computed(() => Boolean(activePlan.value))
+const chartMinWidth = computed(() => `${getHistoryChartMinWidth(historyItems.value.length)}px`)
 const rangeText = computed(() => {
   if (!activePlan.value) return ''
 
@@ -23,6 +33,32 @@ const rangeText = computed(() => {
 
   return `${range.startDate} 至 ${range.endDate}`
 })
+
+const calorieChartOption = computed(() =>
+  buildHistoryLineChartOption({
+    color: '#10b981',
+    items: historyItems.value,
+    unit: 'kcal',
+    valueKey: 'calories',
+    yAxis: {
+      min: 0,
+      name: '每日摄入 (kcal)',
+    },
+  }),
+)
+
+const weightChartOption = computed(() =>
+  buildHistoryLineChartOption({
+    color: '#3b82f6',
+    items: historyItems.value,
+    unit: 'kg',
+    valueKey: 'weightKg',
+    yAxis: {
+      name: '每日体重 (kg)',
+      scale: true,
+    },
+  }),
+)
 
 const loadHistory = async () => {
   if (!profileStore.isInitialized) {
@@ -47,12 +83,6 @@ const loadHistory = async () => {
   }
 }
 
-const formatCalories = (item: DailyPlanHistoryItem) =>
-  item.calories === null ? '' : `${item.calories} kcal`
-
-const formatWeight = (item: DailyPlanHistoryItem) =>
-  item.weightKg === null ? '' : `${item.weightKg.toFixed(2)} kg`
-
 onMounted(() => {
   void loadHistory()
 })
@@ -71,31 +101,30 @@ onMounted(() => {
 
     <van-empty v-else-if="loadError" :description="loadError" />
 
-    <section v-else class="history-page__table-section" aria-label="当前计划每日历史">
-      <div class="history-page__table-scroll">
-        <table class="history-page__table">
-          <tbody>
-            <tr>
-              <th scope="row">时间</th>
-              <td v-for="item in historyItems" :key="`date-${item.date}`">
-                {{ item.date }}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">热量摄入</th>
-              <td v-for="item in historyItems" :key="`calories-${item.date}`">
-                {{ formatCalories(item) }}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">体重</th>
-              <td v-for="item in historyItems" :key="`weight-${item.date}`">
-                {{ formatWeight(item) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <section v-else class="history-page__charts" aria-label="当前计划每日历史趋势">
+      <article class="history-page__chart-panel">
+        <div class="history-page__chart-header">
+          <h2>每日摄入</h2>
+          <p>按天汇总当前计划的热量摄入</p>
+        </div>
+        <div class="history-page__chart-scroll">
+          <div class="history-page__chart-canvas" :style="{ minWidth: chartMinWidth }">
+            <VChart :option="calorieChartOption" autoresize class="history-page__chart" />
+          </div>
+        </div>
+      </article>
+
+      <article class="history-page__chart-panel">
+        <div class="history-page__chart-header">
+          <h2>每日体重</h2>
+          <p>同一天内存在多条记录时，展示最新体重</p>
+        </div>
+        <div class="history-page__chart-scroll">
+          <div class="history-page__chart-canvas" :style="{ minWidth: chartMinWidth }">
+            <VChart :option="weightChartOption" autoresize class="history-page__chart" />
+          </div>
+        </div>
+      </article>
     </section>
   </main>
 </template>
@@ -129,57 +158,48 @@ onMounted(() => {
   padding: 16px;
 }
 
-.history-page__table-section {
+.history-page__charts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.history-page__chart-panel {
   overflow: hidden;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #ffffff;
 }
 
-.history-page__table-scroll {
+.history-page__chart-header {
+  padding: 16px 16px 0;
+}
+
+.history-page__chart-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.history-page__chart-header p {
+  margin: 4px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.history-page__chart-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-.history-page__table {
-  width: max-content;
-  border-collapse: collapse;
-  table-layout: fixed;
+.history-page__chart-canvas {
+  padding: 8px 0 12px;
 }
 
-.history-page__table th,
-.history-page__table td {
-  width: 96px;
-  min-width: 96px;
-  max-width: 96px;
-  height: 52px;
-  padding: 8px;
-  border-right: 1px solid #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
-  color: #111827;
-  font-size: 13px;
-  line-height: 1.3;
-  text-align: center;
-  vertical-align: middle;
-  word-break: break-word;
-}
-
-.history-page__table th {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: #f9fafb;
-  color: #374151;
-  font-weight: 700;
-}
-
-.history-page__table tr:last-child th,
-.history-page__table tr:last-child td {
-  border-bottom: 0;
-}
-
-.history-page__table th:last-child,
-.history-page__table td:last-child {
-  border-right: 0;
+.history-page__chart {
+  height: 260px;
 }
 </style>
