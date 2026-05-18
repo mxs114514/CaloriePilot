@@ -36,6 +36,15 @@ class CaloriePilotDatabase extends Dexie {
       profiles: 'id, createdAt',
       weightRecords: 'id, planId, date',
     })
+
+    this.version(3).stores({
+      calorieRecords: 'id, planId, date',
+      goalPlans: 'id, status, createdAt',
+      planCheckins: 'id, planItemId, date',
+      planItems: 'id, planId, date, type, source, createdAt',
+      profiles: 'id, createdAt',
+      weightRecords: 'id, planId, date',
+    })
   }
 }
 

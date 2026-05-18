@@ -1,4 +1,17 @@
 export type {
+  AiChatMessage,
+  AiChatRequest,
+  AiChatResponse,
+  AiGeneratedCheckin,
+  AiGeneratedMeal,
+  AiGeneratedPlan,
+  AiGeneratedPlanDay,
+  AiGeneratedWorkout,
+} from './ai'
+
+export { isAiGeneratedPlan } from './ai'
+
+export type {
   ActivityLevel,
   CalorieRecord,
   DailyMealCalories,
@@ -11,6 +24,8 @@ export type {
   MealType,
   PlanCheckin,
   PlanItem,
+  PlanItemSource,
+  PlanItemType,
   PlanStatus,
   ProfileForm,
   ProfilePlanProgress,

@@ -176,10 +176,23 @@ export interface ProfilePlanProgress {
 /**
  * 自定义的每日计划/打卡事项模型。
  */
+export type PlanItemSource = 'ai' | 'manual'
+
+export type PlanItemType = 'habit' | 'meal' | 'workout'
+
 export interface PlanItem {
-  id: string
-  title: string
+  calories?: number
   createdAt: DateTimeString
+  date?: DateString
+  dayIndex?: number
+  description?: string
+  id: string
+  metadata?: Record<string, unknown>
+  /** 所属计划 ID */
+  planId: string
+  source: PlanItemSource
+  title: string
+  type: PlanItemType
   updatedAt: DateTimeString
 }
 
