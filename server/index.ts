@@ -2,18 +2,26 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { pathToFileURL } from 'node:url'
 
-import { completeOpenAiCompatibleChat, AiClientError, type CompleteChat } from './aiClient'
+import {
+  completeOpenAiCompatibleChat,
+  completeOpenAiCompatibleChatStream,
+  AiClientError,
+  type CompleteChat,
+  type CompleteChatStream,
+} from './aiClient'
 import { buildChatMessages, buildPlanMessages } from './prompts'
 import { loadServerEnv } from './env'
 import { isAiGeneratedPlan, type AiChatRequest } from '../src/types/ai'
 
 interface CreateAiChatAppOptions {
   completeChat?: CompleteChat
+  completeChatStream?: CompleteChatStream
 }
 
 export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
   const app = new Hono()
   const completeChat = options.completeChat ?? completeOpenAiCompatibleChat
+  const completeChatStream = options.completeChatStream ?? completeOpenAiCompatibleChatStream
 
   app.post('/api/ai/chat', async context => {
     const request = await readAiChatRequest(context.req)
@@ -46,7 +54,53 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
     }
   })
 
+  app.post('/api/ai/chat/stream', async context => {
+    const request = await readAiChatRequest(context.req)
+
+    if (!request || request.mode !== 'chat') {
+      return context.json({ message: 'AI 流式请求只支持普通聊天模式' }, 400)
+    }
+
+    try {
+      const stream = createSseStream(completeChatStream(buildChatMessages(request)))
+
+      return new Response(stream, {
+        headers: {
+          'cache-control': 'no-cache',
+          'content-type': 'text/event-stream; charset=utf-8',
+        },
+      })
+    } catch (error) {
+      if (error instanceof AiClientError) {
+        return context.json({ message: error.message }, error.status)
+      }
+
+      return context.json({ message: 'AI 服务暂时不可用，请稍后重试。' }, 500)
+    }
+  })
+
   return app
+}
+
+const createSseStream = (source: AsyncIterable<string>) => {
+  const encoder = new TextEncoder()
+
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const delta of source) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`))
+        }
+
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'AI 流式响应失败'
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`))
+        controller.close()
+      }
+    },
+  })
 }
 
 const readAiChatRequest = async (request: Request): Promise<AiChatRequest | undefined> => {

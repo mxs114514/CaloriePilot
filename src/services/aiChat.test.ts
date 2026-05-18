@@ -1,0 +1,193 @@
+import type { AiGeneratedPlan, GoalPlan, UserProfile } from '@/types'
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const recentHistoryMock = vi.hoisted(() => ({
+  getAiRecentHistorySummary: vi.fn(),
+}))
+
+vi.mock('./aiRecentHistory', () => ({
+  getAiRecentHistorySummary: recentHistoryMock.getAiRecentHistorySummary,
+}))
+
+import { sendAiChatRequest, sendAiChatStreamRequest } from './aiChat'
+
+describe('AI 对话服务', () => {
+  const profile: UserProfile = {
+    activityLevel: 'light',
+    age: 30,
+    bmi: 23.5,
+    createdAt: '2026-05-18T08:00:00.000Z',
+    currentWeightKg: 70,
+    dailyCalorieTarget: 1600,
+    dietPreference: '少油',
+    gender: 'female',
+    heightCm: 165,
+    id: 'profile-a',
+    name: '莫莫',
+    tdee: 2100,
+    updatedAt: '2026-05-18T08:00:00.000Z',
+  }
+  const activePlan: GoalPlan = {
+    createdAt: '2026-05-18T08:00:00.000Z',
+    dailyCalorieTarget: 1600,
+    durationDays: 7,
+    id: 'plan-a',
+    startDate: '2026-05-18',
+    startWeightKg: 70,
+    status: 'active',
+    updatedAt: '2026-05-18T08:00:00.000Z',
+    weightLossTargetKg: 1,
+  }
+  const draftPlan: AiGeneratedPlan = {
+    days: [{ checkins: [], dayIndex: 1, meals: [], workouts: [] }],
+    summary: '先建立节奏。',
+    title: '轻量计划',
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    recentHistoryMock.getAiRecentHistorySummary.mockResolvedValue({
+      calories: '最近 7 天暂无热量记录。',
+      weight: '最近 7 天暂无体重记录。',
+    })
+  })
+
+  it('发送普通聊天请求时携带用户资料、当前计划和最近历史', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ content: '可以先从晚餐少油开始。', type: 'message' }),
+      ok: true,
+    })
+
+    const response = await sendAiChatRequest(
+      {
+        activePlan,
+        messages: [{ content: '怎么减脂？', role: 'user' }],
+        mode: 'chat',
+        profile,
+      },
+      { fetcher: fetchMock },
+    )
+
+    expect(response).toEqual({ content: '可以先从晚餐少油开始。', type: 'message' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/ai/chat',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    )
+    const firstCallOptions = fetchMock.mock.calls[0]?.[1] as RequestInit
+
+    expect(JSON.parse(String(firstCallOptions.body))).toMatchObject({
+      activePlan: { id: 'plan-a' },
+      mode: 'chat',
+      profile: { id: 'profile-a' },
+      recentHistory: {
+        calories: '最近 7 天暂无热量记录。',
+        weight: '最近 7 天暂无体重记录。',
+      },
+    })
+  })
+
+  it('计划调整请求会携带当前草案', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ content: '已重新调整。', plan: draftPlan, type: 'plan_draft' }),
+      ok: true,
+    })
+
+    await sendAiChatRequest(
+      {
+        activePlan,
+        draftPlan,
+        messages: [{ content: '多跑步', role: 'user' }],
+        mode: 'plan',
+        profile,
+      },
+      { fetcher: fetchMock },
+    )
+
+    const firstCallOptions = fetchMock.mock.calls[0]?.[1] as RequestInit
+
+    expect(JSON.parse(String(firstCallOptions.body))).toMatchObject({
+      draftPlan: { title: '轻量计划' },
+      mode: 'plan',
+    })
+  })
+
+  it('后端错误会转换为用户可读错误', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ message: 'AI 服务未配置' }),
+      ok: false,
+    })
+
+    await expect(
+      sendAiChatRequest(
+        {
+          messages: [{ content: '测试', role: 'user' }],
+          mode: 'chat',
+        },
+        { fetcher: fetchMock },
+      ),
+    ).rejects.toThrow('AI 服务未配置')
+  })
+
+  it('流式聊天请求会按 SSE 增量回调', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
+        controller.enqueue(encoder.encode('data: {"delta":"第一段"}\n\n'))
+        controller.enqueue(encoder.encode('data: {"delta":"第二段"}\n\n'))
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      body: stream,
+      ok: true,
+    })
+    const onDelta = vi.fn()
+
+    await sendAiChatStreamRequest(
+      {
+        activePlan,
+        messages: [{ content: '流式测试', role: 'user' }],
+        mode: 'chat',
+        profile,
+      },
+      {
+        fetcher: fetchMock,
+        onDelta,
+      },
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/ai/chat/stream',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    )
+    expect(onDelta).toHaveBeenNthCalledWith(1, '第一段')
+    expect(onDelta).toHaveBeenNthCalledWith(2, '第二段')
+  })
+
+  it('流式聊天遇到非 JSON 错误响应时返回通用错误', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.reject(new SyntaxError('Unexpected non-whitespace character')),
+      ok: false,
+      text: () => Promise.resolve('404 Not Found'),
+    })
+
+    await expect(
+      sendAiChatStreamRequest(
+        {
+          messages: [{ content: '测试', role: 'user' }],
+          mode: 'chat',
+        },
+        {
+          fetcher: fetchMock,
+          onDelta: vi.fn(),
+        },
+      ),
+    ).rejects.toThrow('AI 请求失败，请稍后重试')
+  })
+})

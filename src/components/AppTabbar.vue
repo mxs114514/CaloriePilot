@@ -1,28 +1,19 @@
 <script setup lang="ts">
-import { showToast } from 'vant'
-
 import { ROUTE_PAGE_TITLES } from '@/router/pageTitles'
-
-const showDevelopingToast = () => {
-  showToast({
-    icon: 'warning-o',
-    message: '功能正在开发中...',
-  })
-}
 </script>
 
 <template>
   <div class="tabbar-container">
     <van-tabbar class="app-tabbar" route safe-area-inset-bottom :fixed="false">
       <van-tabbar-item replace to="/record" icon="records-o">{{ ROUTE_PAGE_TITLES.record }}</van-tabbar-item>
-      <van-tabbar-item icon="todo-list-o" @click="showDevelopingToast">{{ ROUTE_PAGE_TITLES.plan }}</van-tabbar-item>
+      <van-tabbar-item replace to="/plan" icon="todo-list-o">{{ ROUTE_PAGE_TITLES.plan }}</van-tabbar-item>
       <van-tabbar-item replace to="/history" icon="chart-trending-o">{{ ROUTE_PAGE_TITLES.history }}</van-tabbar-item>
       <van-tabbar-item replace to="/profile" icon="user-o">{{ ROUTE_PAGE_TITLES.profile }}</van-tabbar-item>
     </van-tabbar>
 
-    <button type="button" class="fab" :aria-label="ROUTE_PAGE_TITLES['ai-chat']" @click="showDevelopingToast">
+    <router-link class="fab" to="/ai-chat" :aria-label="ROUTE_PAGE_TITLES['ai-chat']">
       <van-icon name="chat-o" size="26" color="#fff" />
-    </button>
+    </router-link>
   </div>
 </template>
 
@@ -66,5 +57,6 @@ const showDevelopingToast = () => {
   box-shadow: 0 10px 24px rgb(20 184 166 / 30%);
   outline: none;
   cursor: pointer;
+  text-decoration: none;
 }
 </style>

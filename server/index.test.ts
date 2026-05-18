@@ -77,4 +77,29 @@ describe('AI 对话后端接口', () => {
     })
     expect(response.status).toBe(200)
   })
+
+  it('普通聊天支持 SSE 流式响应', async () => {
+    const app = createAiChatApp({
+      completeChat: async () => '不会调用',
+      completeChatStream: async function* () {
+        yield '第一段'
+        yield '第二段'
+      },
+    })
+
+    const response = await app.request('/api/ai/chat/stream', {
+      body: JSON.stringify({
+        messages: [{ content: '流式测试', role: 'user' }],
+        mode: 'chat',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    await expect(response.text()).resolves.toBe(
+      'data: {"delta":"第一段"}\n\ndata: {"delta":"第二段"}\n\ndata: [DONE]\n\n',
+    )
+    expect(response.headers.get('content-type')).toContain('text/event-stream')
+    expect(response.status).toBe(200)
+  })
 })

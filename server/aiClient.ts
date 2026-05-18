@@ -1,3 +1,5 @@
+import OpenAI from 'openai'
+
 interface ChatCompletionMessage {
   content: string
   role: 'assistant' | 'system' | 'user'
@@ -14,15 +16,10 @@ export class AiClientError extends Error {
 }
 
 export type CompleteChat = (messages: ChatCompletionMessage[]) => Promise<string>
+export type CompleteChatStream = (messages: ChatCompletionMessage[]) => AsyncIterable<string>
 
 export const completeOpenAiCompatibleChat: CompleteChat = async messages => {
-  const baseUrl = process.env.AI_API_BASE_URL
-  const apiKey = process.env.AI_API_KEY
-  const model = process.env.AI_MODEL
-
-  if (!baseUrl || !apiKey || !model) {
-    throw new AiClientError('AI 服务未配置，请先填写 AI_API_BASE_URL、AI_API_KEY 和 AI_MODEL。')
-  }
+  const { apiKey, baseUrl, model } = getAiConfig()
 
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     body: JSON.stringify({
@@ -53,4 +50,43 @@ export const completeOpenAiCompatibleChat: CompleteChat = async messages => {
   }
 
   return content
+}
+
+export const completeOpenAiCompatibleChatStream: CompleteChatStream = async function* (messages) {
+  const { apiKey, baseUrl, model } = getAiConfig()
+  const openai = new OpenAI({
+    apiKey,
+    baseURL: baseUrl,
+  })
+
+  const stream = await openai.chat.completions.create({
+    messages,
+    model,
+    stream: true,
+    temperature: 0.4,
+  })
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content
+
+    if (delta) {
+      yield delta
+    }
+  }
+}
+
+const getAiConfig = () => {
+  const baseUrl = process.env.AI_API_BASE_URL
+  const apiKey = process.env.AI_API_KEY
+  const model = process.env.AI_MODEL
+
+  if (!baseUrl || !apiKey || !model) {
+    throw new AiClientError('AI 服务未配置，请先填写 AI_API_BASE_URL、AI_API_KEY 和 AI_MODEL。')
+  }
+
+  return {
+    apiKey,
+    baseUrl,
+    model,
+  }
 }
