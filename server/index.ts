@@ -9,7 +9,7 @@ import {
   type CompleteChat,
   type CompleteChatStream,
 } from './aiClient'
-import { buildChatMessages, buildPlanMessages } from './prompts'
+import { buildChatMessages, buildPlanMessages, buildPlanSummaryMessages } from './prompts'
 import { loadServerEnv } from './env'
 import { isAiGeneratedPlan, type AiChatRequest } from '../src/types/ai'
 
@@ -57,12 +57,14 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
   app.post('/api/ai/chat/stream', async context => {
     const request = await readAiChatRequest(context.req)
 
-    if (!request || request.mode !== 'chat') {
-      return context.json({ message: 'AI 流式请求只支持普通聊天模式' }, 400)
+    if (!request || (request.mode !== 'chat' && request.mode !== 'plan')) {
+      return context.json({ message: 'AI 流式请求模式无效' }, 400)
     }
 
     try {
-      const stream = createSseStream(completeChatStream(buildChatMessages(request)))
+      const messages =
+        request.mode === 'plan' ? buildPlanSummaryMessages(request) : buildChatMessages(request)
+      const stream = createSseStream(completeChatStream(messages))
 
       return new Response(stream, {
         headers: {

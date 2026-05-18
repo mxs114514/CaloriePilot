@@ -102,4 +102,28 @@ describe('AI 对话后端接口', () => {
     expect(response.headers.get('content-type')).toContain('text/event-stream')
     expect(response.status).toBe(200)
   })
+
+  it('计划模式支持先返回 SSE 摘要', async () => {
+    let receivedMessages: Array<{ content: string; role: string }> = []
+    const app = createAiChatApp({
+      completeChat: async () => '不会调用',
+      completeChatStream: async function* (messages) {
+        receivedMessages = messages
+        yield '这是计划摘要。'
+      },
+    })
+
+    const response = await app.request('/api/ai/chat/stream', {
+      body: JSON.stringify({
+        messages: [{ content: '帮我生成计划', role: 'user' }],
+        mode: 'plan',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    await expect(response.text()).resolves.toBe('data: {"delta":"这是计划摘要。"}\n\ndata: [DONE]\n\n')
+    expect(receivedMessages[0]?.content).toContain('先返回一段给用户看的计划摘要')
+    expect(response.status).toBe(200)
+  })
 })

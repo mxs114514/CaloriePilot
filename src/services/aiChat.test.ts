@@ -10,7 +10,7 @@ vi.mock('./aiRecentHistory', () => ({
   getAiRecentHistorySummary: recentHistoryMock.getAiRecentHistorySummary,
 }))
 
-import { sendAiChatRequest, sendAiChatStreamRequest } from './aiChat'
+import { preloadAiRecentHistory, sendAiChatRequest, sendAiChatStreamRequest } from './aiChat'
 
 describe('AI 对话服务', () => {
   const profile: UserProfile = {
@@ -47,6 +47,7 @@ describe('AI 对话服务', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
+    recentHistoryMock.getAiRecentHistorySummary.mockClear()
     recentHistoryMock.getAiRecentHistorySummary.mockResolvedValue({
       calories: '最近 7 天暂无热量记录。',
       weight: '最近 7 天暂无体重记录。',
@@ -87,6 +88,41 @@ describe('AI 对话服务', () => {
         weight: '最近 7 天暂无体重记录。',
       },
     })
+  })
+
+  it('可以预加载最近历史并在发送时复用，且最多只发送最近 10 条消息', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ content: '可以。', type: 'message' }),
+      ok: true,
+    })
+    const recentHistory = await preloadAiRecentHistory(activePlan)
+    const messages = Array.from({ length: 12 }, (_, index) => ({
+      content: `消息 ${index + 1}`,
+      role: 'user' as const,
+    }))
+
+    await sendAiChatRequest(
+      {
+        activePlan,
+        messages,
+        mode: 'chat',
+        profile,
+        recentHistory,
+      },
+      { fetcher: fetchMock },
+    )
+
+    const firstCallOptions = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const requestBody = JSON.parse(String(firstCallOptions.body))
+
+    expect(recentHistoryMock.getAiRecentHistorySummary).toHaveBeenCalledTimes(1)
+    expect(requestBody.recentHistory).toEqual({
+      calories: '最近 7 天暂无热量记录。',
+      weight: '最近 7 天暂无体重记录。',
+    })
+    expect(requestBody.messages).toHaveLength(10)
+    expect(requestBody.messages[0]).toEqual({ content: '消息 3', role: 'user' })
+    expect(requestBody.messages[9]).toEqual({ content: '消息 12', role: 'user' })
   })
 
   it('计划调整请求会携带当前草案', async () => {
@@ -168,6 +204,42 @@ describe('AI 对话服务', () => {
     )
     expect(onDelta).toHaveBeenNthCalledWith(1, '第一段')
     expect(onDelta).toHaveBeenNthCalledWith(2, '第二段')
+  })
+
+  it('计划模式也可以发起流式摘要请求', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
+        controller.enqueue(encoder.encode('data: {"delta":"先生成摘要"}\n\n'))
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      body: stream,
+      ok: true,
+    })
+    const onDelta = vi.fn()
+
+    await sendAiChatStreamRequest(
+      {
+        activePlan,
+        messages: [{ content: '生成计划', role: 'user' }],
+        mode: 'plan',
+        profile,
+      },
+      {
+        fetcher: fetchMock,
+        onDelta,
+      },
+    )
+
+    const firstCallOptions = fetchMock.mock.calls[0]?.[1] as RequestInit
+
+    expect(JSON.parse(String(firstCallOptions.body))).toMatchObject({
+      mode: 'plan',
+    })
+    expect(onDelta).toHaveBeenCalledWith('先生成摘要')
   })
 
   it('流式聊天遇到非 JSON 错误响应时返回通用错误', async () => {

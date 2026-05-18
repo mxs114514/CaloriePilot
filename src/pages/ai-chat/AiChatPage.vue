@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import type { AiChatMessage, AiGeneratedPlan } from '@/types'
+import type { AiChatMessage, AiGeneratedPlan, AiRecentHistory } from '@/types'
 
 import { storeToRefs } from 'pinia'
 import { showConfirmDialog, showFailToast, showSuccessToast } from 'vant'
 import { computed, nextTick, onMounted, ref } from 'vue'
 
-import { sendAiChatRequest, sendAiChatStreamRequest } from '@/services/aiChat'
+import {
+  preloadAiRecentHistory,
+  sendAiChatRequest,
+  sendAiChatStreamRequest,
+} from '@/services/aiChat'
 import { saveAiGeneratedPlanItems } from '@/services/planItems'
 import { useProfileStore } from '@/stores/profile'
 
@@ -34,8 +38,15 @@ const draftPlan = ref<AiGeneratedPlan | null>(null)
 const draftContent = ref('')
 const messageListRef = ref<HTMLElement>()
 const activeDayNames = ref<number[]>([1])
+const recentHistory = ref<AiRecentHistory>()
+const recentHistoryPromise = ref<Promise<AiRecentHistory> | null>(null)
 
 const canSend = computed(() => inputText.value.trim().length > 0 && !isSending.value)
+const shouldShowPendingAssistant = computed(() => {
+  const lastMessage = messages.value[messages.value.length - 1]
+
+  return Boolean(isSending.value && lastMessage?.role === 'user')
+})
 const composerState = computed(() =>
   getAiChatComposerState({
     hasDraftPlan: Boolean(draftPlan.value),
@@ -49,6 +60,17 @@ const resetConversation = () => {
   errorMessage.value = ''
   draftPlan.value = null
   draftContent.value = ''
+}
+
+const getPreloadedRecentHistory = async () => {
+  if (recentHistory.value) return recentHistory.value
+  if (!recentHistoryPromise.value) return undefined
+
+  try {
+    return await recentHistoryPromise.value
+  } catch {
+    return undefined
+  }
 }
 
 const toggleChatMode = async () => {
@@ -89,15 +111,17 @@ const sendMessage = async () => {
   await scrollToBottom()
 
   try {
+    const requestRecentHistory = await getPreloadedRecentHistory()
     const requestInput = {
       activePlan: activePlan.value,
       draftPlan: draftPlan.value,
       messages: messages.value.map(({ content, role }) => ({ content, role })),
       mode: requestMode,
       profile: profile.value,
+      recentHistory: requestRecentHistory,
     } as const
 
-    if (requestMode === 'chat') {
+    if (requestMode === 'chat' || requestMode === 'plan') {
       const assistantMessageId = crypto.randomUUID()
       const assistantMessage: UiChatMessage = {
         content: '',
@@ -106,13 +130,20 @@ const sendMessage = async () => {
       }
 
       messages.value.push(assistantMessage)
-      await sendAiChatStreamRequest(requestInput, {
-        onDelta: delta => {
-          appendAssistantDelta(assistantMessageId, delta)
-          void scrollToBottom()
+      await sendAiChatStreamRequest(
+        {
+          ...requestInput,
+          mode: requestMode,
         },
-      })
-      return
+        {
+          onDelta: delta => {
+            appendAssistantDelta(assistantMessageId, delta)
+            void scrollToBottom()
+          },
+        },
+      )
+
+      if (requestMode === 'chat') return
     }
 
     const response = await sendAiChatRequest(requestInput)
@@ -191,6 +222,17 @@ onMounted(async () => {
   if (!profileStore.isInitialized) {
     await profileStore.loadInitialData()
   }
+
+  if (!activePlan.value) return
+
+  try {
+    recentHistoryPromise.value = preloadAiRecentHistory(activePlan.value)
+    recentHistory.value = await recentHistoryPromise.value
+  } catch (error) {
+    console.error('预加载 AI 最近历史失败', error)
+  } finally {
+    recentHistoryPromise.value = null
+  }
 })
 </script>
 
@@ -220,7 +262,7 @@ onMounted(async () => {
 
       <!-- 等待回复期间的加载状态 -->
       <div
-        v-if="isSending && messages.length && messages[messages.length - 1].role === 'user'"
+        v-if="shouldShowPendingAssistant"
         class="ai-chat-page__message is-assistant"
       >
         <div class="message__avatar">

@@ -44,10 +44,12 @@ export interface AiChatRequest {
   messages: AiChatMessage[]
   mode: 'chat' | 'plan'
   profile?: UserProfile
-  recentHistory?: {
-    calories?: string
-    weight?: string
-  }
+  recentHistory?: AiRecentHistory
+}
+
+export interface AiRecentHistory {
+  calories?: string
+  weight?: string
 }
 
 export type AiChatResponse =

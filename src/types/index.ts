@@ -7,6 +7,7 @@ export type {
   AiGeneratedPlan,
   AiGeneratedPlanDay,
   AiGeneratedWorkout,
+  AiRecentHistory,
 } from './ai'
 
 export { isAiGeneratedPlan } from './ai'

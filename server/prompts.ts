@@ -40,6 +40,23 @@ export const buildPlanMessages = (request: AiChatRequest): ChatCompletionMessage
   })),
 ]
 
+export const buildPlanSummaryMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
+  {
+    content: [
+      '你是 CaloriePilot 的健身和饮食计划生成助手。',
+      '请先返回一段给用户看的计划摘要，用中文简短说明计划方向、饮食重点和运动重点。',
+      '不要返回 JSON，不要包裹 Markdown 代码块，不要列出完整每日计划。',
+      buildContextText(request),
+      request.draftPlan ? `当前未保存计划草案：${JSON.stringify(request.draftPlan)}` : '',
+    ].join('\n'),
+    role: 'system',
+  },
+  ...request.messages.map(message => ({
+    content: message.content,
+    role: message.role,
+  })),
+]
+
 const buildContextText = (request: AiChatRequest) =>
   [
     request.profile ? `用户资料：${JSON.stringify(request.profile)}` : '',

@@ -3,6 +3,7 @@ import type {
   AiChatRequest,
   AiChatResponse,
   AiGeneratedPlan,
+  AiRecentHistory,
   GoalPlan,
   UserProfile,
 } from '@/types'
@@ -15,6 +16,7 @@ interface SendAiChatRequestInput {
   messages: AiChatMessage[]
   mode: 'chat' | 'plan'
   profile?: UserProfile | null
+  recentHistory?: AiRecentHistory
 }
 
 interface SendAiChatRequestOptions {
@@ -28,6 +30,11 @@ interface SendAiChatStreamRequestOptions extends SendAiChatRequestOptions {
 interface AiErrorResponse {
   message?: string
 }
+
+const MAX_REQUEST_MESSAGES = 10
+
+export const preloadAiRecentHistory = async (activePlan: GoalPlan): Promise<AiRecentHistory> =>
+  getAiRecentHistorySummary(activePlan)
 
 export const sendAiChatRequest = async (
   input: SendAiChatRequestInput,
@@ -56,10 +63,7 @@ export const sendAiChatStreamRequest = async (
   options: SendAiChatStreamRequestOptions,
 ): Promise<void> => {
   const fetcher = options.fetcher ?? fetch
-  const request = await buildAiChatRequest({
-    ...input,
-    mode: 'chat',
-  })
+  const request = await buildAiChatRequest(input)
   const response = await fetcher('/api/ai/chat/stream', {
     body: JSON.stringify(request),
     headers: {
@@ -90,14 +94,14 @@ const readErrorMessage = async (response: Response) => {
 }
 
 const buildAiChatRequest = async (input: SendAiChatRequestInput): Promise<AiChatRequest> => {
-  const recentHistory = input.activePlan
+  const recentHistory = input.recentHistory ?? (input.activePlan
     ? await getAiRecentHistorySummary(input.activePlan)
-    : undefined
+    : undefined)
 
   return {
     activePlan: input.activePlan ?? undefined,
     draftPlan: input.draftPlan ?? undefined,
-    messages: input.messages,
+    messages: input.messages.slice(-MAX_REQUEST_MESSAGES),
     mode: input.mode,
     profile: input.profile ?? undefined,
     recentHistory,
