@@ -10,7 +10,7 @@ import {
   sendAiChatRequest,
   sendAiChatStreamRequest,
 } from '@/services/aiChat'
-import { saveAiGeneratedPlanItems } from '@/services/planItems'
+import { saveAiPlanDraft } from '@/services/savedAiPlans'
 import { useProfileStore } from '@/stores/profile'
 import { renderMarkdown } from '@/utils/markdown'
 
@@ -36,7 +36,6 @@ const isSaving = ref(false)
 const errorMessage = ref('')
 const planModePending = ref(false)
 const draftPlan = ref<AiGeneratedPlan | null>(null)
-const draftContent = ref('')
 const showDraftPlanPopup = ref(false)
 const planBubbleOffset = ref(getDefaultPlanBubbleOffset())
 const messageListRef = ref<HTMLElement>()
@@ -67,7 +66,6 @@ const resetConversation = () => {
   inputText.value = ''
   errorMessage.value = ''
   draftPlan.value = null
-  draftContent.value = ''
 }
 
 const getPreloadedRecentHistory = async () => {
@@ -156,16 +154,19 @@ const sendMessage = async () => {
 
     const response = await sendAiChatRequest(requestInput)
 
+    if (response.type === 'needs_clarification') {
+      messages.value.push({
+        content: response.message,
+        id: crypto.randomUUID(),
+        role: 'assistant',
+      })
+      return
+    }
+
     if (response.type !== 'plan_draft') return
 
-    draftContent.value = response.content
     draftPlan.value = response.plan
     showDraftPlanPopup.value = true
-    messages.value.push({
-      content: response.content,
-      id: crypto.randomUUID(),
-      role: 'assistant',
-    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 请求失败，请稍后重试'
     errorMessage.value = message
@@ -191,14 +192,9 @@ const appendAssistantDelta = (messageId: string, delta: string) => {
 const confirmSavePlan = async () => {
   if (!draftPlan.value) return
 
-  if (!activePlan.value) {
-    showFailToast('请先完成个人信息和目标设置')
-    return
-  }
-
   isSaving.value = true
   try {
-    await saveAiGeneratedPlanItems(activePlan.value.id, draftPlan.value)
+    await saveAiPlanDraft(draftPlan.value)
     showSuccessToast('计划已保存')
   } catch (error) {
     console.error('保存 AI 计划失败', error)
@@ -230,6 +226,14 @@ const scrollToBottom = async () => {
 
 const openDraftPlanPopup = () => {
   showDraftPlanPopup.value = true
+}
+
+const formatMealType = (mealType: string) => {
+  if (mealType === 'breakfast') return '早餐'
+  if (mealType === 'lunch') return '午餐'
+  if (mealType === 'dinner') return '晚餐'
+
+  return '加餐'
 }
 
 function getDefaultPlanBubbleOffset() {
@@ -341,38 +345,35 @@ onMounted(async () => {
         <header class="draft-popup__header">
           <p class="draft-popup__eyebrow">AI 计划草案</p>
           <h2>{{ draftPlan.title }}</h2>
-          <p>{{ draftPlan.summary }}</p>
+          <p>{{ draftPlan.goal }} · {{ draftPlan.startDate }} 开始 · {{ draftPlan.durationDays }} 天</p>
         </header>
 
         <van-cell-group class="ai-chat-page__draft" inset>
-          <van-cell title="计划天数" :value="`${draftPlan.days.length} 天`" />
+          <van-cell title="目标方向" :value="draftPlan.goal" />
+          <van-cell title="开始日期" :value="draftPlan.startDate" />
+          <van-cell title="计划天数" :value="`${draftPlan.durationDays} 天`" />
 
           <van-collapse v-model="activeDayNames">
             <van-collapse-item
               v-for="day in draftPlan.days"
-              :key="`${day.date ?? 'day'}-${day.dayIndex}`"
-              :title="day.date ? `${day.date}` : `第 ${day.dayIndex} 天`"
+              :key="`day-${day.dayIndex}`"
+              :title="`第 ${day.dayIndex} 天`"
               :name="day.dayIndex"
             >
               <div v-if="day.meals.length" class="plan-detail-section">
                 <div class="plan-detail-title">饮食</div>
                 <div v-for="(meal, index) in day.meals" :key="index" class="plan-detail-item">
-                  <span class="item-title">{{ meal.title }}</span>
-                  <span v-if="meal.description" class="item-desc">：{{ meal.description }}</span>
+                  <span class="item-title">[{{ formatMealType(meal.mealType) }}] {{ meal.title }}</span>
+                  <span class="item-desc">：{{ meal.description }}，约 {{ meal.calories }} kcal</span>
                 </div>
               </div>
               <div v-if="day.workouts.length" class="plan-detail-section">
                 <div class="plan-detail-title">运动</div>
                 <div v-for="(workout, index) in day.workouts" :key="index" class="plan-detail-item">
                   <span class="item-title">{{ workout.title }}</span>
-                  <span v-if="workout.description" class="item-desc">：{{ workout.description }}</span>
-                </div>
-              </div>
-              <div v-if="day.checkins.length" class="plan-detail-section">
-                <div class="plan-detail-title">习惯打卡</div>
-                <div v-for="(checkin, index) in day.checkins" :key="index" class="plan-detail-item">
-                  <span class="item-title">{{ checkin.title }}</span>
-                  <span v-if="checkin.description" class="item-desc">：{{ checkin.description }}</span>
+                  <span class="item-desc">
+                    ：{{ workout.description }}，{{ workout.durationMinutes }} 分钟，约消耗 {{ workout.caloriesBurned }} kcal
+                  </span>
                 </div>
               </div>
             </van-collapse-item>
@@ -414,7 +415,7 @@ onMounted(async () => {
         class="ai-chat-page__send-button"
         round
         type="primary"
-        icon="guide-o"
+        :icon="composerState.sendIcon"
         :disabled="!canSend"
         :loading="isSending"
         aria-label="发送"

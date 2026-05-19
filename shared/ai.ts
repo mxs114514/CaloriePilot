@@ -102,16 +102,18 @@ export const isAiPlanNeedsClarificationResponse = (
 
 export const isAiGeneratedPlan = (value: unknown): value is AiGeneratedPlan => {
   if (!isRecord(value)) return false
-  if (!isStringInRange(value.title, 1, 40)) return false
-  if (!isStringInRange(value.goal, 1, 20)) return false
-  if (!isDateString(value.startDate)) return false
-  if (!isIntegerInRange(value.durationDays, 1, 30)) return false
-  if (!value.title.includes(String(value.durationDays)) || !value.title.includes(value.goal)) {
+  const { days, durationDays, goal, startDate, title } = value
+
+  if (!isStringInRange(title, 1, 40)) return false
+  if (!isStringInRange(goal, 1, 20)) return false
+  if (!isDateString(startDate)) return false
+  if (!isIntegerInRange(durationDays, 1, 30)) return false
+  if (!title.includes(String(durationDays)) || !title.includes(goal)) {
     return false
   }
-  if (!Array.isArray(value.days) || value.days.length !== value.durationDays) return false
+  if (!Array.isArray(days) || days.length !== durationDays) return false
 
-  return value.days.every((day, index) => isAiGeneratedPlanDay(day, index + 1))
+  return days.every((day, index) => isAiGeneratedPlanDay(day, index + 1))
 }
 
 const isAiGeneratedPlanDay = (

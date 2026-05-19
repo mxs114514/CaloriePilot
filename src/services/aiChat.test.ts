@@ -40,9 +40,36 @@ describe('AI 对话服务', () => {
     weightLossTargetKg: 1,
   }
   const draftPlan: AiGeneratedPlan = {
-    days: [{ checkins: [], dayIndex: 1, meals: [], workouts: [] }],
-    summary: '先建立节奏。',
-    title: '轻量计划',
+    days: [
+      {
+        dayIndex: 1,
+        meals: [
+          {
+            calories: 420,
+            description: '燕麦 40g、鸡蛋 1 个。',
+            mealType: 'breakfast',
+            title: '燕麦鸡蛋餐',
+          },
+          {
+            calories: 650,
+            description: '鸡胸肉 120g、米饭 150g。',
+            mealType: 'lunch',
+            title: '鸡胸肉米饭',
+          },
+          {
+            calories: 420,
+            description: '番茄 150g、豆腐 120g。',
+            mealType: 'dinner',
+            title: '番茄豆腐汤',
+          },
+        ],
+        workouts: [],
+      },
+    ],
+    durationDays: 1,
+    goal: '轻量减脂',
+    startDate: '2026-05-20',
+    title: '1 天轻量减脂计划',
   }
 
   beforeEach(() => {
@@ -127,7 +154,7 @@ describe('AI 对话服务', () => {
 
   it('计划调整请求会携带当前草案', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ content: '已重新调整。', plan: draftPlan, type: 'plan_draft' }),
+      json: () => Promise.resolve({ plan: draftPlan, type: 'plan_draft' }),
       ok: true,
     })
 
@@ -145,9 +172,53 @@ describe('AI 对话服务', () => {
     const firstCallOptions = fetchMock.mock.calls[0]?.[1] as RequestInit
 
     expect(JSON.parse(String(firstCallOptions.body))).toMatchObject({
-      draftPlan: { title: '轻量计划' },
+      draftPlan: { title: '1 天轻量减脂计划' },
       mode: 'plan',
     })
+  })
+
+  it('计划请求支持需要澄清响应', async () => {
+    const clarificationResponse = {
+      message: '请告诉我目标方向，例如减脂或增肌。',
+      missingFields: ['goal'],
+      reasons: [],
+      type: 'needs_clarification',
+    } as const
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(clarificationResponse),
+      ok: true,
+    })
+
+    await expect(
+      sendAiChatRequest(
+        {
+          messages: [{ content: '帮我做个计划', role: 'user' }],
+          mode: 'plan',
+        },
+        { fetcher: fetchMock },
+      ),
+    ).resolves.toEqual(clarificationResponse)
+  })
+
+  it('计划请求支持无 content 的新草案响应', async () => {
+    const draftResponse = {
+      plan: draftPlan,
+      type: 'plan_draft',
+    } as const
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(draftResponse),
+      ok: true,
+    })
+
+    await expect(
+      sendAiChatRequest(
+        {
+          messages: [{ content: '生成 1 天轻量减脂计划，明天开始', role: 'user' }],
+          mode: 'plan',
+        },
+        { fetcher: fetchMock },
+      ),
+    ).resolves.toEqual(draftResponse)
   })
 
   it('后端错误会转换为用户可读错误', async () => {
