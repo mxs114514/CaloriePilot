@@ -1,10 +1,19 @@
-import type { AiChatRequest } from '../src/types/ai'
+import type { AiChatRequest } from '../shared/ai'
 
+/**
+ * 内部使用的对话记录消息结构
+ */
 interface ChatCompletionMessage {
   content: string
   role: 'assistant' | 'system' | 'user'
 }
 
+/**
+ * 构建用于常规“聊天交互”场景下的完整对话上下文
+ * AI在其中被赋予健康计划助手的身份，同时接收用户的身高体重数据、当前计划和历史记录背景
+ * @param request 包含用户资料、计划、历史记录及聊天内容的请求对象
+ * @returns 组装系统 prompt 及用户对话后生成的消息数组
+ */
 export const buildChatMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
   {
     content: [
@@ -21,6 +30,12 @@ export const buildChatMessages = (request: AiChatRequest): ChatCompletionMessage
   })),
 ]
 
+/**
+ * 构建用于生成“完整计划 JSON”的对话上下文
+ * AI在其中被赋予特定身份，受到严格指令约束，只返回特定格式的 JSON（包含说明字段以及每日具体的饮食和运动安排）。
+ * @param request AI请求参数
+ * @returns 用于生成完整计划的消息数组
+ */
 export const buildPlanMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
   {
     content: [
@@ -40,6 +55,13 @@ export const buildPlanMessages = (request: AiChatRequest): ChatCompletionMessage
   })),
 ]
 
+/**
+ * 构建用于流式返回“计划摘要”的对话上下文
+ * AI在处理计划请求时，可先用来生成简短的大纲性说明给用户看。
+ * 此阶段被要求不使用JSON或完整日常列表返回。
+ * @param request AI请求参数
+ * @returns 用于生成文字摘要的消息数组
+ */
 export const buildPlanSummaryMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
   {
     content: [
@@ -57,6 +79,11 @@ export const buildPlanSummaryMessages = (request: AiChatRequest): ChatCompletion
   })),
 ]
 
+/**
+ * 内部辅助函数：序列化汇总用户特征、当前计划和最近历史等作为背景信息供 AI 使用
+ * @param request 包含各类环境信息的 AI 请求参数
+ * @returns 组合好的上下文纯文本
+ */
 const buildContextText = (request: AiChatRequest) =>
   [
     request.profile ? `用户资料：${JSON.stringify(request.profile)}` : '',

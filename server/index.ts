@@ -11,13 +11,21 @@ import {
 } from './aiClient'
 import { buildChatMessages, buildPlanMessages, buildPlanSummaryMessages } from './prompts'
 import { loadServerEnv } from './env'
-import { isAiGeneratedPlan, type AiChatRequest } from '../src/types/ai'
+import { isAiGeneratedPlan, type AiChatRequest } from '../shared/ai'
 
+/**
+ * 创建 AI 聊天服务的基础配置选项接口
+ */
 interface CreateAiChatAppOptions {
   completeChat?: CompleteChat
   completeChatStream?: CompleteChatStream
 }
 
+/**
+ * 创建基于 Hono 的后端 AI 对话支持应用实例
+ * @param options 可选参数。用于注入自定义的 AI 调用方法以替换默认行为（常用于测试环境中的 Mock 注入）
+ * @returns 返回一个包含 '/api/ai/chat' 及 '/api/ai/chat/stream' 路由配置的 Hono 应用对象
+ */
 export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
   const app = new Hono()
   const completeChat = options.completeChat ?? completeOpenAiCompatibleChat
@@ -84,6 +92,11 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
   return app
 }
 
+/**
+ * 将常规 AsyncIterable 异步字符串流包装成符合 Server-Sent Events (SSE) 标准的 ReadableStream
+ * @param source 一系列待输出的文字块所构成的 AsyncIterable（如底层大模型流式接口的返回数据）
+ * @returns 用于 fetch/原生 HTTP 响应的浏览器兼容 ReadableStream 对象
+ */
 const createSseStream = (source: AsyncIterable<string>) => {
   const encoder = new TextEncoder()
 
@@ -105,6 +118,12 @@ const createSseStream = (source: AsyncIterable<string>) => {
   })
 }
 
+/**
+ * 将传来的 Request 请求体解析并断言成我们所需的 AiChatRequest 模型接口
+ * 如果失败则静默拦截，并返回一个 undefined 指示不可用
+ * @param request node-Hono / Web Request 对象副本
+ * @returns {Promise<AiChatRequest | undefined>} 分析后的有效体，如果验证失败或抛出错误将返回 undefined
+ */
 const readAiChatRequest = async (request: Request): Promise<AiChatRequest | undefined> => {
   try {
     const body = (await request.json()) as AiChatRequest
@@ -115,6 +134,12 @@ const readAiChatRequest = async (request: Request): Promise<AiChatRequest | unde
   }
 }
 
+/**
+ * 校验反序列化内容，确认 AI 回复的内容是一个支持结构化计划的 JSON，并将最终文本、计划体抽出来返回
+ * 格式不合要求或残缺将抛出 AiClientError
+ * @param content AI 大模型侧返回的包含JSON结果的无转义原始字符串
+ * @returns {content: unknown, plan: AiGeneratedPlan} 包含一段对用户的说明以及符合 AiGeneratedPlan 约定的计划实体
+ */
 const parsePlanDraft = (content: string) => {
   const parsed = JSON.parse(content) as { content?: unknown; plan?: unknown }
 
@@ -128,6 +153,11 @@ const parsePlanDraft = (content: string) => {
   }
 }
 
+/**
+ * 判断当前脚本进程是直接作为一个独立的入口运行 (通常通过 node command/tsx)，还是借作为由其他测试等调用的导入运行(import)
+ * 这决定着服务是否应立即启动监听套接字
+ * @returns 判定为主模块后返回 true
+ */
 const isDirectRun = () => {
   const entry = process.argv[1]
 

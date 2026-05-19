@@ -1,10 +1,17 @@
 import OpenAI from 'openai'
 
+/**
+ * AI 聊天消息接口定义
+ */
 interface ChatCompletionMessage {
   content: string
   role: 'assistant' | 'system' | 'user'
 }
 
+/**
+ * 自定义 AI 客户端错误类
+ * 用于包装和抛出 AI 请求过程中的各类业务或网络异常
+ */
 export class AiClientError extends Error {
   constructor(
     message: string,
@@ -15,9 +22,21 @@ export class AiClientError extends Error {
   }
 }
 
+/**
+ * 普通(非流式) AI 聊天请求函数类型定义
+ */
 export type CompleteChat = (messages: ChatCompletionMessage[]) => Promise<string>
+/**
+ * 流式 AI 聊天请求函数类型定义
+ */
 export type CompleteChatStream = (messages: ChatCompletionMessage[]) => AsyncIterable<string>
 
+/**
+ * 调用兼容 OpenAI 格式 API 的无流式对话补全方法
+ * 发送请求以获取单次完整的 AI 回复
+ * @param messages 聊天记录数组
+ * @returns AI 回复的完整字符串内容
+ */
 export const completeOpenAiCompatibleChat: CompleteChat = async messages => {
   const { apiKey, baseUrl, model } = getAiConfig()
 
@@ -52,6 +71,12 @@ export const completeOpenAiCompatibleChat: CompleteChat = async messages => {
   return content
 }
 
+/**
+ * 调用兼容 OpenAI 格式 API 的流式对话补全方法
+ * 利用 AsyncGenerator 函数逐个处理大模型通过 Stream 返回的增量文本响应
+ * @param messages 聊天记录数组
+ * @returns 包含流式文字块的 AsyncIterable 对象
+ */
 export const completeOpenAiCompatibleChatStream: CompleteChatStream = async function* (messages) {
   const { apiKey, baseUrl, model } = getAiConfig()
   const openai = new OpenAI({
@@ -75,6 +100,11 @@ export const completeOpenAiCompatibleChatStream: CompleteChatStream = async func
   }
 }
 
+/**
+ * 获取并校验 AI 服务所需的配置环境变量
+ * @returns 包含 apiKey、baseUrl 和 model 的配置对象
+ * @throws 缺少必要环境变量时抛出相应提示的 AiClientError
+ */
 const getAiConfig = () => {
   const baseUrl = process.env.AI_API_BASE_URL
   const apiKey = process.env.AI_API_KEY

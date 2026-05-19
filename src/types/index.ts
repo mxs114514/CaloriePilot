@@ -8,9 +8,9 @@ export type {
   AiGeneratedPlanDay,
   AiGeneratedWorkout,
   AiRecentHistory,
-} from './ai'
+} from '../../shared/ai'
 
-export { isAiGeneratedPlan } from './ai'
+export { isAiGeneratedPlan } from '../../shared/ai'
 
 export type {
   ActivityLevel,
@@ -32,4 +32,4 @@ export type {
   ProfilePlanProgress,
   UserProfile,
   WeightRecord,
-} from './models'
+} from '../../shared/models'
