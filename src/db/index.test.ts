@@ -4,6 +4,6 @@ import { db } from './index'
 
 describe('database schema', () => {
   it('uses a schema version that can migrate existing databases to AI plan items', () => {
-    expect(db.verno).toBe(3)
+    expect(db.verno).toBe(4)
   })
 })

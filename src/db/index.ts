@@ -3,6 +3,7 @@ import type {
   GoalPlan,
   PlanCheckin,
   PlanItem,
+  SavedAiPlan,
   UserProfile,
   WeightRecord,
 } from '@/types'
@@ -15,6 +16,7 @@ class CaloriePilotDatabase extends Dexie {
   planCheckins!: Table<PlanCheckin, string>
   planItems!: Table<PlanItem, string>
   profiles!: Table<UserProfile, string>
+  savedAiPlans!: Table<SavedAiPlan, string>
   weightRecords!: Table<WeightRecord, string>
 
   constructor() {
@@ -43,6 +45,16 @@ class CaloriePilotDatabase extends Dexie {
       planCheckins: 'id, planItemId, date',
       planItems: 'id, planId, date, type, source, createdAt',
       profiles: 'id, createdAt',
+      weightRecords: 'id, planId, date',
+    })
+
+    this.version(4).stores({
+      calorieRecords: 'id, planId, date',
+      goalPlans: 'id, status, createdAt',
+      planCheckins: 'id, planItemId, date',
+      planItems: 'id, planId, date, type, source, createdAt',
+      profiles: 'id, createdAt',
+      savedAiPlans: 'id, status, startDate',
       weightRecords: 'id, planId, date',
     })
   }

@@ -30,7 +30,7 @@ export type DietPreference = string
  */
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
-export type PlanStatus = 'active' | 'archived' | 'completed'
+export type PlanStatus = 'active' | 'archived' | 'completed' | 'pending'
 
 /**
  * YYYY-MM-DD 格式日期字符串
@@ -208,4 +208,52 @@ export interface PlanCheckin {
   completedAt?: DateTimeString
   createdAt: DateTimeString
   updatedAt: DateTimeString
+}
+
+export type SavedPlanStatus = PlanStatus
+
+export type SavedMealType = MealType
+
+export interface SavedAiPlan {
+  days: SavedPlanDay[]
+  durationDays: number
+  goal: string
+  id: string
+  startDate: DateString
+  status: SavedPlanStatus
+  title: string
+}
+
+export interface SavedPlanDay {
+  dayIndex: number
+  meals: SavedMeal[]
+  workouts: SavedWorkout[]
+}
+
+export interface SavedMeal {
+  calories: number
+  completedAt?: DateTimeString
+  description: string
+  id: string
+  isCompleted: boolean
+  mealType: SavedMealType
+  source: PlanItemSource
+  title: string
+}
+
+export interface SavedWorkout {
+  caloriesBurned: number
+  completedAt?: DateTimeString
+  description: string
+  durationMinutes: number
+  id: string
+  isCompleted: boolean
+  source: PlanItemSource
+  title: string
+}
+
+export interface PlanCompletionStats {
+  completedCount: number
+  completionRate: number
+  totalCount: number
 }
