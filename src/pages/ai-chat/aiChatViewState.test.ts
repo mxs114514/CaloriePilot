@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getAiChatComposerState } from './aiChatViewState'
+import { getAiChatComposerState, getAiDraftPlanPresentationState } from './aiChatViewState'
 
 describe('AI 对话视图状态', () => {
   it('普通对话时只显示计划切换按钮和发送图标', () => {
@@ -39,6 +39,20 @@ describe('AI 对话视图状态', () => {
       modeToggleIcon: 'chat-o',
       modeToggleText: '对话',
       sendIcon: 'play-circle-o',
+    })
+  })
+
+  it('有计划草案时使用悬浮入口展示计划，不在聊天流内联展示', () => {
+    expect(getAiDraftPlanPresentationState({ hasDraftPlan: true })).toEqual({
+      shouldShowInlinePlan: false,
+      shouldShowPlanBubble: true,
+    })
+  })
+
+  it('没有计划草案时不显示计划悬浮入口', () => {
+    expect(getAiDraftPlanPresentationState({ hasDraftPlan: false })).toEqual({
+      shouldShowInlinePlan: false,
+      shouldShowPlanBubble: false,
     })
   })
 })

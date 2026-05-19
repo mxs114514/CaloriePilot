@@ -3,6 +3,10 @@ interface AiChatViewStateInput {
   isPlanMode: boolean
 }
 
+interface AiDraftPlanPresentationStateInput {
+  hasDraftPlan: boolean
+}
+
 export const getAiChatComposerState = ({ hasDraftPlan, isPlanMode }: AiChatViewStateInput) => {
   const isPlanContext = isPlanMode || hasDraftPlan
   return {
@@ -11,3 +15,10 @@ export const getAiChatComposerState = ({ hasDraftPlan, isPlanMode }: AiChatViewS
     sendIcon: isPlanContext ? 'play-circle-o' : 'guide-o',
   }
 }
+
+export const getAiDraftPlanPresentationState = ({
+  hasDraftPlan,
+}: AiDraftPlanPresentationStateInput) => ({
+  shouldShowInlinePlan: false,
+  shouldShowPlanBubble: hasDraftPlan,
+})

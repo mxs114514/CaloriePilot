@@ -12,8 +12,9 @@ import {
 } from '@/services/aiChat'
 import { saveAiGeneratedPlanItems } from '@/services/planItems'
 import { useProfileStore } from '@/stores/profile'
+import { renderMarkdown } from '@/utils/markdown'
 
-import { getAiChatComposerState } from './aiChatViewState'
+import { getAiChatComposerState, getAiDraftPlanPresentationState } from './aiChatViewState'
 
 interface UiChatMessage extends AiChatMessage {
   id: string
@@ -36,6 +37,8 @@ const errorMessage = ref('')
 const planModePending = ref(false)
 const draftPlan = ref<AiGeneratedPlan | null>(null)
 const draftContent = ref('')
+const showDraftPlanPopup = ref(false)
+const planBubbleOffset = ref(getDefaultPlanBubbleOffset())
 const messageListRef = ref<HTMLElement>()
 const activeDayNames = ref<number[]>([1])
 const recentHistory = ref<AiRecentHistory>()
@@ -51,6 +54,11 @@ const composerState = computed(() =>
   getAiChatComposerState({
     hasDraftPlan: Boolean(draftPlan.value),
     isPlanMode: planModePending.value,
+  }),
+)
+const draftPlanPresentationState = computed(() =>
+  getAiDraftPlanPresentationState({
+    hasDraftPlan: Boolean(draftPlan.value),
   }),
 )
 
@@ -152,6 +160,7 @@ const sendMessage = async () => {
 
     draftContent.value = response.content
     draftPlan.value = response.plan
+    showDraftPlanPopup.value = true
     messages.value.push({
       content: response.content,
       id: crypto.randomUUID(),
@@ -202,6 +211,7 @@ const confirmSavePlan = async () => {
 const continueAdjusting = () => {
   planModePending.value = true
   inputText.value = ''
+  showDraftPlanPopup.value = false
   messages.value.push({
     content: '请输入需要计划修改的地方',
     id: crypto.randomUUID(),
@@ -216,6 +226,21 @@ const scrollToBottom = async () => {
   if (!el) return
 
   el.scrollTop = el.scrollHeight
+}
+
+const openDraftPlanPopup = () => {
+  showDraftPlanPopup.value = true
+}
+
+function getDefaultPlanBubbleOffset() {
+  if (typeof window === 'undefined') {
+    return { x: 320, y: 520 }
+  }
+
+  return {
+    x: Math.max(16, window.innerWidth - 72),
+    y: Math.max(96, window.innerHeight - 180),
+  }
 }
 
 onMounted(async () => {
@@ -256,6 +281,11 @@ onMounted(async () => {
               <span class="dot"></span>
             </span>
           </p>
+          <div
+            v-else-if="message.role === 'assistant'"
+            class="message__markdown"
+            v-html="renderMarkdown(message.content)"
+          ></div>
           <p v-else>{{ message.content }}</p>
         </div>
       </div>
@@ -286,40 +316,68 @@ onMounted(async () => {
         style="margin: auto;"
       />
 
-      <van-cell-group v-if="draftPlan" class="ai-chat-page__draft" inset>
-        <van-cell :title="draftPlan.title" :label="draftPlan.summary" />
-        <van-cell title="计划天数" :value="`${draftPlan.days.length} 天`" />
+    </section>
 
-        <van-collapse v-model="activeDayNames">
-          <van-collapse-item
-            v-for="day in draftPlan.days"
-            :key="`${day.date ?? 'day'}-${day.dayIndex}`"
-            :title="day.date ? `${day.date}` : `第 ${day.dayIndex} 天`"
-            :name="day.dayIndex"
-          >
-            <div v-if="day.meals.length" class="plan-detail-section">
-              <div class="plan-detail-title">🍔 饮食</div>
-              <div v-for="(meal, index) in day.meals" :key="index" class="plan-detail-item">
-                <span class="item-title">{{ meal.title }}</span>
-                <span v-if="meal.description" class="item-desc">：{{ meal.description }}</span>
+    <p v-if="errorMessage" class="ai-chat-page__error">{{ errorMessage }}</p>
+
+    <van-floating-bubble
+      v-if="draftPlanPresentationState.shouldShowPlanBubble"
+      v-model:offset="planBubbleOffset"
+      axis="xy"
+      icon="chat"
+      magnetic="x"
+      @click="openDraftPlanPopup"
+    />
+
+    <van-popup
+      v-model:show="showDraftPlanPopup"
+      class="ai-chat-page__draft-popup"
+      closeable
+      position="bottom"
+      round
+      safe-area-inset-bottom
+    >
+      <div v-if="draftPlan" class="draft-popup__content">
+        <header class="draft-popup__header">
+          <p class="draft-popup__eyebrow">AI 计划草案</p>
+          <h2>{{ draftPlan.title }}</h2>
+          <p>{{ draftPlan.summary }}</p>
+        </header>
+
+        <van-cell-group class="ai-chat-page__draft" inset>
+          <van-cell title="计划天数" :value="`${draftPlan.days.length} 天`" />
+
+          <van-collapse v-model="activeDayNames">
+            <van-collapse-item
+              v-for="day in draftPlan.days"
+              :key="`${day.date ?? 'day'}-${day.dayIndex}`"
+              :title="day.date ? `${day.date}` : `第 ${day.dayIndex} 天`"
+              :name="day.dayIndex"
+            >
+              <div v-if="day.meals.length" class="plan-detail-section">
+                <div class="plan-detail-title">饮食</div>
+                <div v-for="(meal, index) in day.meals" :key="index" class="plan-detail-item">
+                  <span class="item-title">{{ meal.title }}</span>
+                  <span v-if="meal.description" class="item-desc">：{{ meal.description }}</span>
+                </div>
               </div>
-            </div>
-            <div v-if="day.workouts.length" class="plan-detail-section">
-              <div class="plan-detail-title">💪 运动</div>
-              <div v-for="(workout, index) in day.workouts" :key="index" class="plan-detail-item">
-                <span class="item-title">{{ workout.title }}</span>
-                <span v-if="workout.description" class="item-desc">：{{ workout.description }}</span>
+              <div v-if="day.workouts.length" class="plan-detail-section">
+                <div class="plan-detail-title">运动</div>
+                <div v-for="(workout, index) in day.workouts" :key="index" class="plan-detail-item">
+                  <span class="item-title">{{ workout.title }}</span>
+                  <span v-if="workout.description" class="item-desc">：{{ workout.description }}</span>
+                </div>
               </div>
-            </div>
-            <div v-if="day.checkins.length" class="plan-detail-section">
-              <div class="plan-detail-title">✅ 习惯打卡</div>
-              <div v-for="(checkin, index) in day.checkins" :key="index" class="plan-detail-item">
-                <span class="item-title">{{ checkin.title }}</span>
-                <span v-if="checkin.description" class="item-desc">：{{ checkin.description }}</span>
+              <div v-if="day.checkins.length" class="plan-detail-section">
+                <div class="plan-detail-title">习惯打卡</div>
+                <div v-for="(checkin, index) in day.checkins" :key="index" class="plan-detail-item">
+                  <span class="item-title">{{ checkin.title }}</span>
+                  <span v-if="checkin.description" class="item-desc">：{{ checkin.description }}</span>
+                </div>
               </div>
-            </div>
-          </van-collapse-item>
-        </van-collapse>
+            </van-collapse-item>
+          </van-collapse>
+        </van-cell-group>
 
         <div class="ai-chat-page__draft-actions">
           <van-button round block plain type="primary" @click="continueAdjusting">
@@ -329,10 +387,8 @@ onMounted(async () => {
             确认保存
           </van-button>
         </div>
-      </van-cell-group>
-    </section>
-
-    <p v-if="errorMessage" class="ai-chat-page__error">{{ errorMessage }}</p>
+      </div>
+    </van-popup>
 
     <section class="ai-chat-page__composer">
       <van-button
@@ -409,7 +465,8 @@ onMounted(async () => {
   max-width: 75%;
 }
 
-.message__content p {
+.message__content p,
+.message__markdown {
   padding: 12px 16px;
   margin: 0;
   border-radius: 18px;
@@ -418,6 +475,51 @@ onMounted(async () => {
   line-height: 1.5;
   white-space: pre-wrap;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.message__markdown :deep(p),
+.message__markdown :deep(ul),
+.message__markdown :deep(ol),
+.message__markdown :deep(pre),
+.message__markdown :deep(blockquote) {
+  margin: 0 0 8px;
+}
+
+.message__markdown :deep(p:last-child),
+.message__markdown :deep(ul:last-child),
+.message__markdown :deep(ol:last-child),
+.message__markdown :deep(pre:last-child),
+.message__markdown :deep(blockquote:last-child) {
+  margin-bottom: 0;
+}
+
+.message__markdown :deep(ul),
+.message__markdown :deep(ol) {
+  padding-left: 20px;
+}
+
+.message__markdown :deep(code) {
+  padding: 2px 5px;
+  font-size: 13px;
+  background: #f2f3f5;
+  border-radius: 4px;
+}
+
+.message__markdown :deep(pre) {
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: #f2f3f5;
+  border-radius: 8px;
+}
+
+.message__markdown :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.message__markdown :deep(a) {
+  color: #1989fa;
+  word-break: break-all;
 }
 
 .ai-chat-page__message.is-assistant {
@@ -429,7 +531,8 @@ onMounted(async () => {
   color: #1989fa;
 }
 
-.is-assistant .message__content p {
+.is-assistant .message__content p,
+.is-assistant .message__markdown {
   background: #fff;
   border-top-left-radius: 4px;
 }
@@ -453,6 +556,45 @@ onMounted(async () => {
   margin: 10px 0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   border-radius: 16px;
+}
+
+.ai-chat-page__draft-popup {
+  height: min(78vh, 720px);
+  overflow: hidden;
+}
+
+.draft-popup__content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+.draft-popup__header {
+  padding: 8px 34px 4px 0;
+}
+
+.draft-popup__header h2 {
+  margin: 0 0 8px;
+  color: #1f2937;
+  font-size: 20px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.draft-popup__header p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.draft-popup__header .draft-popup__eyebrow {
+  margin-bottom: 6px;
+  color: #1989fa;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .ai-chat-page__draft-actions {
