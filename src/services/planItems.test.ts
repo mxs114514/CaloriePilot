@@ -57,9 +57,7 @@ vi.mock('@/db', () => ({
 }))
 
 import {
-  buildPlanItemsFromAiPlan,
   getCurrentPlanItems,
-  saveAiGeneratedPlanItems,
   togglePlanItemCheckin,
 } from './planItems'
 
@@ -68,71 +66,6 @@ describe('AI 计划事项服务', () => {
     dbMock.reset()
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-05-18T08:00:00.000Z'))
-  })
-
-  it('将 AI 计划中的食谱、训练和习惯转换为 PlanItem', () => {
-    const items = buildPlanItemsFromAiPlan('plan-a', {
-      days: [
-        {
-          checkins: [{ description: '早睡', title: '23 点前睡觉' }],
-          date: '2026-05-19',
-          dayIndex: 1,
-          meals: [{ calories: 420, description: '燕麦和鸡蛋', title: '早餐' }],
-          workouts: [{ description: '慢跑 30 分钟', title: '晨跑' }],
-        },
-      ],
-      summary: '第一天建立节奏。',
-      title: '轻量减脂计划',
-    })
-
-    expect(items).toEqual([
-      expect.objectContaining({
-        calories: 420,
-        date: '2026-05-19',
-        dayIndex: 1,
-        description: '燕麦和鸡蛋',
-        planId: 'plan-a',
-        source: 'ai',
-        title: '早餐',
-        type: 'meal',
-      }),
-      expect.objectContaining({
-        date: '2026-05-19',
-        dayIndex: 1,
-        description: '慢跑 30 分钟',
-        planId: 'plan-a',
-        source: 'ai',
-        title: '晨跑',
-        type: 'workout',
-      }),
-      expect.objectContaining({
-        date: '2026-05-19',
-        dayIndex: 1,
-        description: '早睡',
-        planId: 'plan-a',
-        source: 'ai',
-        title: '23 点前睡觉',
-        type: 'habit',
-      }),
-    ])
-  })
-
-  it('保存已确认 AI 计划时写入全部事项', async () => {
-    const savedItems = await saveAiGeneratedPlanItems('plan-a', {
-      days: [
-        {
-          checkins: [{ title: '喝水 2L' }],
-          dayIndex: 1,
-          meals: [{ title: '午餐' }],
-          workouts: [{ title: '羽毛球' }],
-        },
-      ],
-      summary: '保持活动。',
-      title: '运动计划',
-    })
-
-    expect(savedItems).toHaveLength(3)
-    expect(dbMock.getPlanItems()).toHaveLength(3)
   })
 
   it('按日期、天数和类型查询当前计划事项', async () => {

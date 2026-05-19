@@ -166,13 +166,13 @@ const hasValidMealOrder = (meals: unknown[]) => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
-const isDateString = (value: unknown) =>
+const isDateString = (value: unknown): value is DateString =>
   typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
 
-const isIntegerInRange = (value: unknown, min: number, max: number) =>
+const isIntegerInRange = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
 
-const isStringInRange = (value: unknown, min: number, max: number) =>
+const isStringInRange = (value: unknown, min: number, max: number): value is string =>
   typeof value === 'string' && value.length >= min && value.length <= max
 
 const isAllowedValue = <T extends string>(value: unknown, allowedValues: T[]): value is T =>
