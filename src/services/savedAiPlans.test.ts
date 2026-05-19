@@ -252,6 +252,17 @@ describe('保存后 AI 计划服务', () => {
       expect.arrayContaining([expect.objectContaining({ id: 'old', status: 'completed' })]),
     )
   })
+
+  it('查询当前或未来保存后计划时 active 优先于 pending', async () => {
+    dbMock.setSavedAiPlans([
+      makeSavedPlan({ id: 'active', startDate: '2026-05-20', status: 'active' }),
+      makeSavedPlan({ id: 'future', startDate: '2026-05-25', status: 'pending' }),
+    ])
+
+    await expect(getCurrentOrPendingSavedAiPlan('2026-05-20')).resolves.toMatchObject({
+      id: 'active',
+    })
+  })
 })
 
 const makeDraftPlan = (): AiGeneratedPlan => ({
