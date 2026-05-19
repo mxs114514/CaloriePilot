@@ -11,7 +11,11 @@ import {
 } from './aiClient'
 import { buildChatMessages, buildPlanMessages, buildPlanSummaryMessages } from './prompts'
 import { loadServerEnv } from './env'
-import { isAiGeneratedPlan, type AiChatRequest } from '../shared/ai'
+import {
+  isAiPlanDraftResponse,
+  isAiPlanNeedsClarificationResponse,
+  type AiChatRequest,
+} from '../shared/ai'
 
 /**
  * 创建 AI 聊天服务的基础配置选项接口
@@ -46,13 +50,9 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
       }
 
       const content = await completeChat(buildPlanMessages(request))
-      const planDraft = parsePlanDraft(content)
+      const planResponse = parsePlanResponse(content)
 
-      return context.json({
-        content: planDraft.content,
-        plan: planDraft.plan,
-        type: 'plan_draft' as const,
-      })
+      return context.json(planResponse)
     } catch (error) {
       if (error instanceof AiClientError) {
         return context.json({ message: error.message }, error.status)
@@ -135,22 +135,24 @@ const readAiChatRequest = async (request: Request): Promise<AiChatRequest | unde
 }
 
 /**
- * 校验反序列化内容，确认 AI 回复的内容是一个支持结构化计划的 JSON，并将最终文本、计划体抽出来返回
+ * 校验反序列化内容，确认 AI 回复的是新计划草案或需要澄清响应。
  * 格式不合要求或残缺将抛出 AiClientError
  * @param content AI 大模型侧返回的包含JSON结果的无转义原始字符串
- * @returns {content: unknown, plan: AiGeneratedPlan} 包含一段对用户的说明以及符合 AiGeneratedPlan 约定的计划实体
  */
-const parsePlanDraft = (content: string) => {
-  const parsed = JSON.parse(content) as { content?: unknown; plan?: unknown }
+const parsePlanResponse = (content: string) => {
+  let parsed: unknown
 
-  if (typeof parsed.content !== 'string' || !isAiGeneratedPlan(parsed.plan)) {
+  try {
+    parsed = JSON.parse(content)
+  } catch {
     throw new AiClientError('AI 返回的计划格式无效，请重新生成。')
   }
 
-  return {
-    content: parsed.content,
-    plan: parsed.plan,
+  if (isAiPlanDraftResponse(parsed) || isAiPlanNeedsClarificationResponse(parsed)) {
+    return parsed
   }
+
+  throw new AiClientError('AI 返回的计划格式无效，请重新生成。')
 }
 
 /**
