@@ -5,28 +5,32 @@ export interface AiChatMessage {
   role: 'assistant' | 'user'
 }
 
+export type PlanClarificationField = 'durationDays' | 'startDate' | 'goal'
+
+export type InvalidPlanRequestReason =
+  | 'ambiguous_duration'
+  | 'ambiguous_start_date'
+  | 'duration_exceeds_limit'
+  | 'long_duration_confirmation_required'
+  | 'start_date_before_today'
+
+export type AiMealType = 'breakfast' | 'dinner' | 'lunch' | 'snack'
+
 export interface AiGeneratedMeal {
-  calories?: number
-  description?: string
-  metadata?: Record<string, unknown>
+  calories: number
+  description: string
+  mealType: AiMealType
   title: string
 }
 
 export interface AiGeneratedWorkout {
-  description?: string
-  metadata?: Record<string, unknown>
-  title: string
-}
-
-export interface AiGeneratedCheckin {
-  description?: string
-  metadata?: Record<string, unknown>
+  caloriesBurned: number
+  description: string
+  durationMinutes: number
   title: string
 }
 
 export interface AiGeneratedPlanDay {
-  checkins: AiGeneratedCheckin[]
-  date?: DateString
   dayIndex: number
   meals: AiGeneratedMeal[]
   workouts: AiGeneratedWorkout[]
@@ -34,8 +38,22 @@ export interface AiGeneratedPlanDay {
 
 export interface AiGeneratedPlan {
   days: AiGeneratedPlanDay[]
-  summary: string
+  durationDays: number
+  goal: string
+  startDate: DateString
   title: string
+}
+
+export interface AiPlanDraftResponse {
+  plan: AiGeneratedPlan
+  type: 'plan_draft'
+}
+
+export interface AiPlanNeedsClarificationResponse {
+  message: string
+  missingFields: PlanClarificationField[]
+  reasons: InvalidPlanRequestReason[]
+  type: 'needs_clarification'
 }
 
 export interface AiChatRequest {
@@ -54,28 +72,111 @@ export interface AiRecentHistory {
 
 export type AiChatResponse =
   | { content: string; type: 'message' }
-  | { content: string; plan: AiGeneratedPlan; type: 'plan_draft' }
+  | AiPlanDraftResponse
+  | AiPlanNeedsClarificationResponse
+
+const mealTypes: AiMealType[] = ['breakfast', 'lunch', 'dinner', 'snack']
+const requiredMealOrder: AiMealType[] = ['breakfast', 'lunch', 'dinner']
+const clarificationFields: PlanClarificationField[] = ['durationDays', 'startDate', 'goal']
+const invalidPlanRequestReasons: InvalidPlanRequestReason[] = [
+  'duration_exceeds_limit',
+  'long_duration_confirmation_required',
+  'start_date_before_today',
+  'ambiguous_start_date',
+  'ambiguous_duration',
+]
+
+export const isAiPlanDraftResponse = (value: unknown): value is AiPlanDraftResponse =>
+  isRecord(value) && value.type === 'plan_draft' && isAiGeneratedPlan(value.plan)
+
+export const isAiPlanNeedsClarificationResponse = (
+  value: unknown,
+): value is AiPlanNeedsClarificationResponse => {
+  if (!isRecord(value)) return false
+  if (value.type !== 'needs_clarification') return false
+  if (!isStringInRange(value.message, 1, 200)) return false
+  if (!isArrayOfAllowedValues(value.missingFields, clarificationFields)) return false
+
+  return isArrayOfAllowedValues(value.reasons, invalidPlanRequestReasons)
+}
 
 export const isAiGeneratedPlan = (value: unknown): value is AiGeneratedPlan => {
   if (!isRecord(value)) return false
-  if (typeof value.title !== 'string' || value.title.length === 0) return false
-  if (typeof value.summary !== 'string' || value.summary.length === 0) return false
-  if (!Array.isArray(value.days)) return false
+  if (!isStringInRange(value.title, 1, 40)) return false
+  if (!isStringInRange(value.goal, 1, 20)) return false
+  if (!isDateString(value.startDate)) return false
+  if (!isIntegerInRange(value.durationDays, 1, 30)) return false
+  if (!value.title.includes(String(value.durationDays)) || !value.title.includes(value.goal)) {
+    return false
+  }
+  if (!Array.isArray(value.days) || value.days.length !== value.durationDays) return false
 
-  return value.days.every(isAiGeneratedPlanDay)
+  return value.days.every((day, index) => isAiGeneratedPlanDay(day, index + 1))
 }
 
-const isAiGeneratedPlanDay = (value: unknown): value is AiGeneratedPlanDay => {
+const isAiGeneratedPlanDay = (
+  value: unknown,
+  expectedDayIndex: number,
+): value is AiGeneratedPlanDay => {
+  if (!isRecord(value)) return false
+  if (value.dayIndex !== expectedDayIndex) return false
+  if (!Array.isArray(value.meals) || value.meals.length < 3) return false
+  if (!Array.isArray(value.workouts)) return false
+  if (!hasValidMealOrder(value.meals)) return false
+
+  return value.meals.every(isAiGeneratedMeal) && value.workouts.every(isAiGeneratedWorkout)
+}
+
+const isAiGeneratedMeal = (value: unknown): value is AiGeneratedMeal => {
   if (!isRecord(value)) return false
 
   return (
-    typeof value.dayIndex === 'number' &&
-    Number.isInteger(value.dayIndex) &&
-    Array.isArray(value.meals) &&
-    Array.isArray(value.workouts) &&
-    Array.isArray(value.checkins)
+    isAllowedValue(value.mealType, mealTypes) &&
+    isStringInRange(value.title, 1, 30) &&
+    isStringInRange(value.description, 1, 120) &&
+    isIntegerInRange(value.calories, 50, 2000)
   )
+}
+
+const isAiGeneratedWorkout = (value: unknown): value is AiGeneratedWorkout => {
+  if (!isRecord(value)) return false
+
+  return (
+    isStringInRange(value.title, 1, 30) &&
+    isStringInRange(value.description, 1, 120) &&
+    isIntegerInRange(value.durationMinutes, 1, 300) &&
+    isIntegerInRange(value.caloriesBurned, 1, 2000)
+  )
+}
+
+const hasValidMealOrder = (meals: unknown[]) => {
+  const mealTypeValues = meals.map(meal =>
+    isRecord(meal) && typeof meal.mealType === 'string' ? meal.mealType : '',
+  )
+
+  if (!requiredMealOrder.every((mealType, index) => mealTypeValues[index] === mealType)) {
+    return false
+  }
+
+  return mealTypeValues.slice(3).every(mealType => mealType === 'snack')
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
+
+const isDateString = (value: unknown) =>
+  typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+
+const isIntegerInRange = (value: unknown, min: number, max: number) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+
+const isStringInRange = (value: unknown, min: number, max: number) =>
+  typeof value === 'string' && value.length >= min && value.length <= max
+
+const isAllowedValue = <T extends string>(value: unknown, allowedValues: T[]): value is T =>
+  typeof value === 'string' && allowedValues.includes(value as T)
+
+const isArrayOfAllowedValues = <T extends string>(
+  value: unknown,
+  allowedValues: T[],
+): value is T[] => Array.isArray(value) && value.every(item => isAllowedValue(item, allowedValues))
