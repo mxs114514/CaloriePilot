@@ -5,6 +5,7 @@ interface AiChatViewStateInput {
 
 interface AiDraftPlanPresentationStateInput {
   hasDraftPlan: boolean
+  isDraftPlanPopupOpen?: boolean
 }
 
 export const getAiChatComposerState = ({ hasDraftPlan, isPlanMode }: AiChatViewStateInput) => {
@@ -18,7 +19,8 @@ export const getAiChatComposerState = ({ hasDraftPlan, isPlanMode }: AiChatViewS
 
 export const getAiDraftPlanPresentationState = ({
   hasDraftPlan,
+  isDraftPlanPopupOpen = false,
 }: AiDraftPlanPresentationStateInput) => ({
   shouldShowInlinePlan: false,
-  shouldShowPlanBubble: hasDraftPlan,
+  shouldShowPlanBubble: hasDraftPlan && !isDraftPlanPopupOpen,
 })

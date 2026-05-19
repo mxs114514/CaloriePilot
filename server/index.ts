@@ -14,6 +14,7 @@ import { loadServerEnv } from './env'
 import {
   isAiPlanDraftResponse,
   isAiPlanNeedsClarificationResponse,
+  validateAiPlanResponse,
   type AiChatRequest,
 } from '../shared/ai'
 
@@ -49,8 +50,7 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
         return context.json({ content, type: 'message' as const })
       }
 
-      const content = await completeChat(buildPlanMessages(request))
-      const planResponse = parsePlanResponse(content)
+      const planResponse = await completePlanResponse(completeChat, buildPlanMessages(request))
 
       return context.json(planResponse)
     } catch (error) {
@@ -134,6 +134,28 @@ const readAiChatRequest = async (request: Request): Promise<AiChatRequest | unde
   }
 }
 
+const completePlanResponse = async (
+  completeChat: CompleteChat,
+  messages: ReturnType<typeof buildPlanMessages>,
+) => {
+  const options = {
+    maxTokens: 8192,
+    responseFormat: 'json_object' as const,
+  }
+  const firstContent = await completeChat(messages, options)
+  const firstResult = parsePlanResponse(firstContent)
+
+  if (firstResult.success) return firstResult.response
+
+  const retryMessages = buildPlanRepairMessages(messages, firstContent, firstResult.errors)
+  const retryContent = await completeChat(retryMessages, options)
+  const retryResult = parsePlanResponse(retryContent)
+
+  if (retryResult.success) return retryResult.response
+
+  throw new AiClientError(`AI 返回的计划格式无效：${retryResult.errors.join('；')}`)
+}
+
 /**
  * 校验反序列化内容，确认 AI 回复的是新计划草案或需要澄清响应。
  * 格式不合要求或残缺将抛出 AiClientError
@@ -145,15 +167,50 @@ const parsePlanResponse = (content: string) => {
   try {
     parsed = JSON.parse(content)
   } catch {
-    throw new AiClientError('AI 返回的计划格式无效，请重新生成。')
+    return {
+      errors: ['响应不是合法 JSON'],
+      success: false as const,
+    }
+  }
+
+  const validation = validateAiPlanResponse(parsed)
+
+  if (!validation.success) {
+    return {
+      errors: validation.errors,
+      success: false as const,
+    }
   }
 
   if (isAiPlanDraftResponse(parsed) || isAiPlanNeedsClarificationResponse(parsed)) {
-    return parsed
+    return {
+      response: parsed,
+      success: true as const,
+    }
   }
 
-  throw new AiClientError('AI 返回的计划格式无效，请重新生成。')
+  return {
+    errors: ['AI 返回的计划格式无效'],
+    success: false as const,
+  }
 }
+
+const buildPlanRepairMessages = (
+  messages: ReturnType<typeof buildPlanMessages>,
+  invalidContent: string,
+  errors: string[],
+) => [
+  ...messages,
+  {
+    content: [
+      '上一次返回的 JSON 没有通过 CaloriePilot 的计划结构校验。',
+      '请只返回修复后的完整 JSON，不要解释，不要使用 Markdown。',
+      `校验错误：${errors.join('；')}`,
+      `上一次返回：${invalidContent}`,
+    ].join('\n'),
+    role: 'user' as const,
+  },
+]
 
 /**
  * 判断当前脚本进程是直接作为一个独立的入口运行 (通常通过 node command/tsx)，还是借作为由其他测试等调用的导入运行(import)

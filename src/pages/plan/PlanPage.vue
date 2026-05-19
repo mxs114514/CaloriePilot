@@ -16,9 +16,18 @@ import {
   updateSavedWorkout,
 } from '@/services/savedAiPlans'
 
+import {
+  buildPlanPageViewState,
+  getDefaultActiveDayNames,
+  updateMealCompletionInPlan,
+  updateWorkoutCompletionInPlan,
+} from './planPageViewState'
+
 const savedPlan = ref<SavedAiPlan | null>(null)
 const isLoading = ref(false)
-const activeDayNames = ref<number[]>([1])
+const activeTab = ref<'meals' | 'workouts'>('meals')
+const activeMealDayNames = ref<number[]>([])
+const activeWorkoutDayNames = ref<number[]>([])
 
 const mealDialog = reactive({
   calories: '',
@@ -40,34 +49,47 @@ const workoutDialog = reactive({
   title: '',
 })
 
-const planStatusText = computed(() => {
-  if (!savedPlan.value) return ''
-  if (savedPlan.value.status === 'active') return '进行中'
-  if (savedPlan.value.status === 'pending') return '待开始'
-  if (savedPlan.value.status === 'completed') return '已结束'
+const viewState = computed(() =>
+  savedPlan.value ? buildPlanPageViewState(savedPlan.value) : null,
+)
 
-  return '已归档'
-})
-
-const loadSavedPlan = async () => {
-  isLoading.value = true
+const loadSavedPlan = async ({ showLoading = false } = {}) => {
+  if (showLoading) isLoading.value = true
   try {
-    savedPlan.value = await getCurrentOrPendingSavedAiPlan()
+    const plan = await getCurrentOrPendingSavedAiPlan()
+    savedPlan.value = plan
+
+    if (plan && activeMealDayNames.value.length === 0) {
+      const defaultActiveDayNames = getDefaultActiveDayNames(plan)
+      activeMealDayNames.value = defaultActiveDayNames
+      activeWorkoutDayNames.value = defaultActiveDayNames
+    }
   } catch (error) {
     console.error('加载 AI 计划失败', error)
     showFailToast('加载计划失败')
   } finally {
-    isLoading.value = false
+    if (showLoading) isLoading.value = false
   }
 }
 
 const toggleMeal = async (dayIndex: number, meal: SavedMeal) => {
   if (!savedPlan.value) return
 
+  const previousPlan = savedPlan.value
+  const isCompleted = !meal.isCompleted
+  const completedAt = new Date().toISOString()
+  savedPlan.value = updateMealCompletionInPlan(
+    previousPlan,
+    dayIndex,
+    meal.id,
+    isCompleted,
+    completedAt,
+  )
+
   try {
     await toggleSavedMealCompletion(savedPlan.value.id, dayIndex, meal.id)
-    await loadSavedPlan()
   } catch (error) {
+    savedPlan.value = previousPlan
     console.error('切换饮食完成状态失败', error)
     showFailToast('更新失败')
   }
@@ -76,10 +98,21 @@ const toggleMeal = async (dayIndex: number, meal: SavedMeal) => {
 const toggleWorkout = async (dayIndex: number, workout: SavedWorkout) => {
   if (!savedPlan.value) return
 
+  const previousPlan = savedPlan.value
+  const isCompleted = !workout.isCompleted
+  const completedAt = new Date().toISOString()
+  savedPlan.value = updateWorkoutCompletionInPlan(
+    previousPlan,
+    dayIndex,
+    workout.id,
+    isCompleted,
+    completedAt,
+  )
+
   try {
     await toggleSavedWorkoutCompletion(savedPlan.value.id, dayIndex, workout.id)
-    await loadSavedPlan()
   } catch (error) {
+    savedPlan.value = previousPlan
     console.error('切换运动完成状态失败', error)
     showFailToast('更新失败')
   }
@@ -205,7 +238,7 @@ const submitWorkoutDialog = async () => {
     await loadSavedPlan()
   } catch (error) {
     console.error('保存运动失败', error)
-    showFailToast('保存失败')
+    showFailToast(error instanceof Error ? error.message : '保存失败')
   }
 }
 
@@ -218,6 +251,7 @@ const confirmDeleteMeal = async (dayIndex: number, meal: SavedMeal) => {
       title: '删除饮食',
     })
     await deleteSavedMeal(savedPlan.value.id, dayIndex, meal.id)
+    showSuccessToast('已删除')
     await loadSavedPlan()
   } catch {
     // 用户取消删除时不需要提示。
@@ -233,21 +267,14 @@ const confirmDeleteWorkout = async (dayIndex: number, workout: SavedWorkout) => 
       title: '删除运动',
     })
     await deleteSavedWorkout(savedPlan.value.id, dayIndex, workout.id)
+    showSuccessToast('已删除')
     await loadSavedPlan()
   } catch {
     // 用户取消删除时不需要提示。
   }
 }
 
-const formatMealType = (mealType: string) => {
-  if (mealType === 'breakfast') return '早餐'
-  if (mealType === 'lunch') return '午餐'
-  if (mealType === 'dinner') return '晚餐'
-
-  return '加餐'
-}
-
-onMounted(loadSavedPlan)
+onMounted(() => loadSavedPlan({ showLoading: true }))
 </script>
 
 <template>
@@ -255,124 +282,187 @@ onMounted(loadSavedPlan)
     <van-loading v-if="isLoading" class="plan-page__loading" />
 
     <van-empty
-      v-else-if="!savedPlan"
+      v-else-if="!savedPlan || !viewState"
+      class="plan-page__empty"
       image="search"
       description="暂无已保存 AI 计划"
     />
 
     <section v-else class="plan-page__content">
-      <header class="plan-page__header">
-        <div>
-          <p class="plan-page__eyebrow">{{ planStatusText }}</p>
-          <h1>{{ savedPlan.title }}</h1>
-          <p>{{ savedPlan.goal }} · {{ savedPlan.startDate }} 开始 · {{ savedPlan.durationDays }} 天</p>
+      <header class="plan-summary">
+        <div class="plan-summary__title-row">
+          <div>
+            <p class="plan-summary__eyebrow">当前计划</p>
+            <h1>{{ savedPlan.title }}</h1>
+          </div>
+          <van-tag round type="primary">{{ viewState.summary.statusText }}</van-tag>
+        </div>
+        <p class="plan-summary__subtitle">{{ viewState.summary.subtitle }}</p>
+        <div class="plan-summary__progress">
+          <div class="plan-summary__progress-text">
+            <span>完成进度</span>
+            <strong>
+              {{ viewState.summary.completedCount }}/{{ viewState.summary.totalCount }}
+            </strong>
+          </div>
+          <van-progress
+            :percentage="viewState.summary.completionPercent"
+            stroke-width="8"
+            color="#1989fa"
+          />
         </div>
       </header>
 
-      <van-collapse v-model="activeDayNames">
-        <van-collapse-item
-          v-for="day in savedPlan.days"
-          :key="day.dayIndex"
-          :name="day.dayIndex"
-          :title="`第 ${day.dayIndex} 天`"
-        >
-          <section class="plan-section">
-            <div class="plan-section__header">
-              <h2>饮食</h2>
-              <van-button
-                size="small"
-                plain
-                type="primary"
-                icon="plus"
-                @click="openAddMealDialog(day.dayIndex)"
-              >
-                加餐
-              </van-button>
-            </div>
-
-            <van-cell
-              v-for="meal in day.meals"
-              :key="meal.id"
-              center
-              class="plan-item"
-              :label="`${meal.description} · ${meal.calories} kcal`"
-              :title="`${formatMealType(meal.mealType)}｜${meal.title}`"
+      <van-tabs v-model:active="activeTab" class="plan-tabs" shrink animated>
+        <van-tab title="饮食计划" name="meals">
+          <van-collapse v-model="activeMealDayNames" class="plan-day-list">
+            <van-collapse-item
+              v-for="day in viewState.mealDays"
+              :key="day.dayIndex"
+              :name="day.dayIndex"
             >
-              <template #right-icon>
-                <div class="plan-item__actions">
-                  <van-checkbox
-                    :model-value="meal.isCompleted"
-                    @click.stop="toggleMeal(day.dayIndex, meal)"
-                  />
-                  <van-button
-                    size="mini"
-                    plain
-                    icon="edit"
-                    @click.stop="openEditMealDialog(day.dayIndex, meal)"
-                  />
-                  <van-button
-                    size="mini"
-                    plain
-                    icon="delete-o"
-                    @click.stop="confirmDeleteMeal(day.dayIndex, meal)"
-                  />
+              <template #title>
+                <div class="day-title">
+                  <span>第 {{ day.dayIndex }} 天</span>
+                  <small>{{ day.items.length }} 餐 · {{ day.totalCalories }} kcal</small>
                 </div>
               </template>
-            </van-cell>
-          </section>
 
-          <section class="plan-section">
-            <div class="plan-section__header">
-              <h2>运动</h2>
-              <van-button
-                size="small"
-                plain
-                type="primary"
-                icon="plus"
-                @click="openAddWorkoutDialog(day.dayIndex)"
-              >
-                运动
-              </van-button>
-            </div>
+              <div class="day-actions">
+                <van-button
+                  size="small"
+                  plain
+                  type="primary"
+                  icon="plus"
+                  @click.stop="openAddMealDialog(day.dayIndex)"
+                >
+                  新增加餐
+                </van-button>
+              </div>
 
-            <van-empty
-              v-if="day.workouts.length === 0"
-              image="search"
-              description="当天暂无运动安排"
-            />
+              <van-cell-group class="plan-list" :border="false">
+                <van-swipe-cell v-for="meal in day.items" :key="meal.id">
+                  <van-cell center class="plan-list__item" :border="false">
+                    <template #icon>
+                      <van-checkbox
+                        :model-value="meal.isCompleted"
+                        @click.stop="toggleMeal(day.dayIndex, meal)"
+                      />
+                    </template>
+                    <template #title>
+                      <div class="item-title">
+                        <van-tag plain type="primary">{{ meal.mealTypeText }}</van-tag>
+                        <span :class="{ 'is-completed': meal.isCompleted }">{{ meal.title }}</span>
+                      </div>
+                    </template>
+                    <template #label>
+                      <p class="item-description">{{ meal.description }}</p>
+                      <p class="item-meta">{{ meal.calories }} kcal</p>
+                    </template>
+                  </van-cell>
+                  <template #right>
+                    <div class="swipe-actions">
+                      <van-button
+                        square
+                        type="primary"
+                        icon="edit"
+                        @click="openEditMealDialog(day.dayIndex, meal)"
+                      />
+                      <van-button
+                        square
+                        type="danger"
+                        icon="delete-o"
+                        @click="confirmDeleteMeal(day.dayIndex, meal)"
+                      />
+                    </div>
+                  </template>
+                </van-swipe-cell>
+              </van-cell-group>
+            </van-collapse-item>
+          </van-collapse>
+        </van-tab>
 
-            <van-cell
-              v-for="workout in day.workouts"
-              :key="workout.id"
-              center
-              class="plan-item"
-              :label="`${workout.description} · ${workout.durationMinutes} 分钟 · ${workout.caloriesBurned} kcal`"
-              :title="workout.title"
+        <van-tab title="运动计划" name="workouts">
+          <van-collapse v-model="activeWorkoutDayNames" class="plan-day-list">
+            <van-collapse-item
+              v-for="day in viewState.workoutDays"
+              :key="day.dayIndex"
+              :name="day.dayIndex"
             >
-              <template #right-icon>
-                <div class="plan-item__actions">
-                  <van-checkbox
-                    :model-value="workout.isCompleted"
-                    @click.stop="toggleWorkout(day.dayIndex, workout)"
-                  />
-                  <van-button
-                    size="mini"
-                    plain
-                    icon="edit"
-                    @click.stop="openEditWorkoutDialog(day.dayIndex, workout)"
-                  />
-                  <van-button
-                    size="mini"
-                    plain
-                    icon="delete-o"
-                    @click.stop="confirmDeleteWorkout(day.dayIndex, workout)"
-                  />
+              <template #title>
+                <div class="day-title">
+                  <span>第 {{ day.dayIndex }} 天</span>
+                  <small>
+                    {{ day.items.length }} 项 · {{ day.totalDurationMinutes }} 分钟 ·
+                    {{ day.totalCaloriesBurned }} kcal
+                  </small>
                 </div>
               </template>
-            </van-cell>
-          </section>
-        </van-collapse-item>
-      </van-collapse>
+
+              <div class="day-actions">
+                <van-button
+                  size="small"
+                  plain
+                  type="primary"
+                  icon="plus"
+                  @click.stop="openAddWorkoutDialog(day.dayIndex)"
+                >
+                  新增运动
+                </van-button>
+              </div>
+
+              <van-empty
+                v-if="day.items.length === 0"
+                class="day-empty"
+                image="search"
+                description="当天暂无运动安排"
+              />
+
+              <van-cell-group v-else class="plan-list" :border="false">
+                <van-swipe-cell v-for="workout in day.items" :key="workout.id">
+                  <van-cell center class="plan-list__item" :border="false">
+                    <template #icon>
+                      <van-checkbox
+                        :model-value="workout.isCompleted"
+                        @click.stop="toggleWorkout(day.dayIndex, workout)"
+                      />
+                    </template>
+                    <template #title>
+                      <div class="item-title">
+                        <span :class="{ 'is-completed': workout.isCompleted }">
+                          {{ workout.title }}
+                        </span>
+                      </div>
+                    </template>
+                    <template #label>
+                      <p class="item-description">{{ workout.description }}</p>
+                      <p class="item-meta">
+                        {{ workout.durationMinutes }} 分钟 · 消耗 {{ workout.caloriesBurned }} kcal
+                      </p>
+                    </template>
+                  </van-cell>
+                  <template #right>
+                    <div class="swipe-actions">
+                      <van-button
+                        square
+                        type="primary"
+                        icon="edit"
+                        @click="openEditWorkoutDialog(day.dayIndex, workout)"
+                      />
+                      <van-button
+                        square
+                        type="danger"
+                        icon="delete-o"
+                        @click="confirmDeleteWorkout(day.dayIndex, workout)"
+                      />
+                    </div>
+                  </template>
+                </van-swipe-cell>
+              </van-cell-group>
+            </van-collapse-item>
+          </van-collapse>
+        </van-tab>
+      </van-tabs>
     </section>
 
     <van-dialog
@@ -406,9 +496,11 @@ onMounted(loadSavedPlan)
 
 <style scoped>
 .plan-page {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  padding: 16px 16px calc(88px + env(safe-area-inset-bottom));
-  background: #f7f8fa;
+  padding: 14px 14px calc(88px + env(safe-area-inset-bottom));
+  background: #f6f7f9;
 }
 
 .plan-page__loading {
@@ -417,78 +509,199 @@ onMounted(loadSavedPlan)
   padding: 48px 0;
 }
 
+.plan-page__empty {
+  margin: auto;
+}
+
 .plan-page__content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
-.plan-page__header {
-  padding: 18px 16px;
-  color: #1f2937;
+.plan-summary {
+  padding: 16px;
+  color: #172033;
   background: #fff;
   border: 1px solid #ebedf0;
   border-radius: 8px;
 }
 
-.plan-page__header h1 {
-  margin: 0 0 8px;
+.plan-summary__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plan-summary__eyebrow {
+  margin: 0 0 5px;
+  color: #1989fa;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.plan-summary h1 {
+  margin: 0;
   font-size: 22px;
   line-height: 1.25;
   letter-spacing: 0;
 }
 
-.plan-page__header p {
-  margin: 0;
-  color: #6b7280;
+.plan-summary__subtitle {
+  margin: 8px 0 0;
+  color: #667085;
   font-size: 14px;
   line-height: 1.5;
 }
 
-.plan-page__eyebrow {
-  margin-bottom: 6px !important;
-  color: #1989fa !important;
-  font-weight: 600;
+.plan-summary__progress {
+  margin-top: 14px;
 }
 
-.plan-section {
-  padding: 8px 0 12px;
-}
-
-.plan-section + .plan-section {
-  border-top: 1px solid #f0f1f3;
-}
-
-.plan-section__header {
+.plan-summary__progress-text {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 4px 0 8px;
+  margin-bottom: 8px;
+  color: #667085;
+  font-size: 13px;
 }
 
-.plan-section__header h2 {
-  margin: 0;
-  color: #1f2937;
+.plan-summary__progress-text strong {
+  color: #172033;
+  font-weight: 700;
+}
+
+.plan-tabs {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #ebedf0;
+  border-radius: 8px;
+}
+
+.plan-tabs :deep(.van-tabs__wrap) {
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.plan-tabs :deep(.van-tabs__content) {
+  background: #fff;
+}
+
+.plan-day-list :deep(.van-collapse-item__title) {
+  align-items: center;
+}
+
+.plan-day-list :deep(.van-collapse-item__content) {
+  padding: 0 12px 12px;
+  background: #fff;
+}
+
+.day-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.day-title span {
+  color: #172033;
   font-size: 15px;
-  line-height: 1.4;
-  letter-spacing: 0;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
-.plan-item {
-  padding-left: 0;
-  padding-right: 0;
+.day-title small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
-.plan-item__actions {
+.day-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 0 10px;
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: transparent;
+}
+
+.plan-list__item {
+  min-height: 72px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+}
+
+.plan-list__item :deep(.van-cell__title) {
+  min-width: 0;
+}
+
+.plan-list__item :deep(.van-cell__label) {
+  margin-top: 5px;
+}
+
+.plan-list__item :deep(.van-checkbox) {
+  margin-right: 10px;
+}
+
+.item-title {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 8px;
+  color: #172033;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
-.plan-item__actions :deep(.van-button--mini) {
-  width: 28px;
-  height: 28px;
-  padding: 0;
+.item-title span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.item-description {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.item-meta {
+  margin: 4px 0 0;
+  color: #1989fa;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.is-completed {
+  color: #98a2b3;
+  text-decoration: line-through;
+}
+
+.swipe-actions {
+  display: flex;
+  height: 100%;
+}
+
+.swipe-actions .van-button {
+  height: 100%;
+}
+
+.day-empty {
+  padding: 12px 0 4px;
+}
+
+.day-empty :deep(.van-empty__image) {
+  width: 72px;
+  height: 72px;
 }
 </style>

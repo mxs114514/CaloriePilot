@@ -25,7 +25,15 @@ export class AiClientError extends Error {
 /**
  * 普通(非流式) AI 聊天请求函数类型定义
  */
-export type CompleteChat = (messages: ChatCompletionMessage[]) => Promise<string>
+export interface CompleteChatOptions {
+  maxTokens?: number
+  responseFormat?: 'json_object'
+}
+
+export type CompleteChat = (
+  messages: ChatCompletionMessage[],
+  options?: CompleteChatOptions,
+) => Promise<string>
 /**
  * 流式 AI 聊天请求函数类型定义
  */
@@ -37,15 +45,24 @@ export type CompleteChatStream = (messages: ChatCompletionMessage[]) => AsyncIte
  * @param messages 聊天记录数组
  * @returns AI 回复的完整字符串内容
  */
-export const completeOpenAiCompatibleChat: CompleteChat = async messages => {
+export const completeOpenAiCompatibleChat: CompleteChat = async (messages, options) => {
   const { apiKey, baseUrl, model } = getAiConfig()
+  const requestBody: Record<string, unknown> = {
+    messages,
+    model,
+    temperature: 0.4,
+  }
+
+  if (options?.responseFormat) {
+    requestBody.response_format = { type: options.responseFormat }
+  }
+
+  if (typeof options?.maxTokens === 'number') {
+    requestBody.max_tokens = options.maxTokens
+  }
 
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    body: JSON.stringify({
-      messages,
-      model,
-      temperature: 0.4,
-    }),
+    body: JSON.stringify(requestBody),
     headers: {
       authorization: `Bearer ${apiKey}`,
       'content-type': 'application/json',

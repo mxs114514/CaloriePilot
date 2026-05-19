@@ -49,6 +49,18 @@ describe('AI 对话视图状态', () => {
     })
   })
 
+  it('计划草案弹窗已经打开时不显示悬浮入口', () => {
+    expect(
+      getAiDraftPlanPresentationState({
+        hasDraftPlan: true,
+        isDraftPlanPopupOpen: true,
+      }),
+    ).toEqual({
+      shouldShowInlinePlan: false,
+      shouldShowPlanBubble: false,
+    })
+  })
+
   it('没有计划草案时不显示计划悬浮入口', () => {
     expect(getAiDraftPlanPresentationState({ hasDraftPlan: false })).toEqual({
       shouldShowInlinePlan: false,

@@ -89,6 +89,31 @@ describe('保存后 AI 计划服务', () => {
     })
   })
 
+  it('未注入 createId 时通过 crypto 上下文生成默认 ID', () => {
+    const originalCrypto = globalThis.crypto
+    const cryptoMock = {
+      randomUUID: vi.fn(function (this: Crypto) {
+        if (this !== cryptoMock) {
+          throw new TypeError('Illegal invocation')
+        }
+
+        return 'browser-id'
+      }),
+    } as unknown as Crypto
+    vi.stubGlobal('crypto', cryptoMock)
+
+    try {
+      const plan = buildSavedAiPlanFromDraft(makeDraftPlan(), {
+        getToday: () => '2026-05-20',
+      })
+
+      expect(plan.id).toBe('browser-id')
+      expect(cryptoMock.randomUUID).toHaveBeenCalled()
+    } finally {
+      vi.stubGlobal('crypto', originalCrypto)
+    }
+  })
+
   it('保存新计划时归档已有 active 和 pending 计划', async () => {
     dbMock.setSavedAiPlans([
       makeSavedPlan({ id: 'active-plan', status: 'active' }),

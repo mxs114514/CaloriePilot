@@ -4,6 +4,7 @@ import {
   isAiGeneratedPlan,
   isAiPlanDraftResponse,
   isAiPlanNeedsClarificationResponse,
+  validateAiPlanResponse,
   type AiChatRequest,
   type AiGeneratedPlan,
 } from './ai'
@@ -133,5 +134,41 @@ describe('共享 AI 类型契约', () => {
         type: 'needs_clarification',
       }),
     ).toBe(true)
+  })
+
+  it('返回 AI 草案格式错误原因，便于提示模型修复', () => {
+    const result = validateAiPlanResponse({
+      plan: {
+        days: [
+          {
+            dayIndex: 1,
+            meals: [
+              {
+                calories: 420,
+                description: '燕麦 40g、鸡蛋 1 个。',
+                title: '燕麦鸡蛋餐',
+              },
+            ],
+            workouts: [{ description: '快走 30 分钟。', title: '快走' }],
+          },
+        ],
+        durationDays: 7,
+        goal: '轻量减脂',
+        startDate: '2026-05-20',
+        title: '7 天轻量减脂计划',
+      },
+      type: 'plan_draft',
+    })
+
+    expect(result).toEqual({
+      errors: expect.arrayContaining([
+        'plan.days.length 必须等于 durationDays',
+        'plan.days[0].meals 长度至少为 3',
+        'plan.days[0].meals[0].mealType 必须是 breakfast、lunch、dinner 或 snack',
+        'plan.days[0].workouts[0].durationMinutes 必须是 1 到 300 的整数',
+        'plan.days[0].workouts[0].caloriesBurned 必须是 1 到 2000 的整数',
+      ]),
+      success: false,
+    })
   })
 })

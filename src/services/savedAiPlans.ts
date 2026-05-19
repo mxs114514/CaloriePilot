@@ -50,7 +50,7 @@ export const buildSavedAiPlanFromDraft = (
   draft: AiGeneratedPlan,
   runtime: SavedAiPlanRuntime = {},
 ): SavedAiPlan => {
-  const createId = runtime.createId ?? crypto.randomUUID
+  const createId = runtime.createId ?? (() => crypto.randomUUID())
   const today = runtime.getToday?.() ?? getLocalDateString()
   const planId = createId()
 

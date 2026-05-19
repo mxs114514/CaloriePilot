@@ -58,6 +58,7 @@ const composerState = computed(() =>
 const draftPlanPresentationState = computed(() =>
   getAiDraftPlanPresentationState({
     hasDraftPlan: Boolean(draftPlan.value),
+    isDraftPlanPopupOpen: showDraftPlanPopup.value,
   }),
 )
 
@@ -166,7 +167,7 @@ const sendMessage = async () => {
     if (response.type !== 'plan_draft') return
 
     draftPlan.value = response.plan
-    showDraftPlanPopup.value = true
+    showDraftPlanPopup.value = false
   } catch (error) {
     const message = error instanceof Error ? error.message : 'AI 请求失败，请稍后重试'
     errorMessage.value = message
@@ -195,10 +196,12 @@ const confirmSavePlan = async () => {
   isSaving.value = true
   try {
     await saveAiPlanDraft(draftPlan.value)
+    draftPlan.value = null
+    showDraftPlanPopup.value = false
     showSuccessToast('计划已保存')
   } catch (error) {
     console.error('保存 AI 计划失败', error)
-    showFailToast('保存失败，请稍后重试')
+    showFailToast(error instanceof Error ? error.message : '保存失败，请稍后重试')
   } finally {
     isSaving.value = false
   }
@@ -725,13 +728,4 @@ onMounted(async () => {
   }
 }
 
-@media (max-width: 374px) {
-  .ai-chat-page__composer {
-    grid-template-columns: 1fr auto;
-  }
-
-  .ai-chat-page__plan-button {
-    grid-column: 1 / -1;
-  }
-}
 </style>

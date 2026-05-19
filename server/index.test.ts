@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createAiChatApp } from './index'
 
@@ -82,6 +82,101 @@ describe('AI 对话后端接口', () => {
       type: 'message',
     })
     expect(response.status).toBe(200)
+  })
+
+  it('计划模式调用时启用 JSON Output', async () => {
+    const completeChat = vi.fn(async () =>
+      JSON.stringify({
+        plan: validAiGeneratedPlan,
+        type: 'plan_draft',
+      }),
+    )
+    const app = createAiChatApp({ completeChat })
+
+    await app.request('/api/ai/chat', {
+      body: JSON.stringify({
+        messages: [{ content: '帮我生成计划', role: 'user' }],
+        mode: 'plan',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    expect(completeChat.mock.calls[0]?.[1]).toEqual({
+      maxTokens: 8192,
+      responseFormat: 'json_object',
+    })
+  })
+
+  it('计划模式首次返回格式无效时会带错误原因重试一次', async () => {
+    const completeChat = vi
+      .fn()
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          plan: {
+            ...validAiGeneratedPlan,
+            days: [],
+          },
+          type: 'plan_draft',
+        }),
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          plan: validAiGeneratedPlan,
+          type: 'plan_draft',
+        }),
+      )
+    const app = createAiChatApp({ completeChat })
+
+    const response = await app.request('/api/ai/chat', {
+      body: JSON.stringify({
+        messages: [{ content: '帮我生成计划', role: 'user' }],
+        mode: 'plan',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    expect(completeChat).toHaveBeenCalledTimes(2)
+    expect(completeChat.mock.calls[1]?.[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.stringContaining('plan.days.length 必须等于 durationDays'),
+          role: 'user',
+        }),
+      ]),
+    )
+    await expect(response.json()).resolves.toEqual({
+      plan: validAiGeneratedPlan,
+      type: 'plan_draft',
+    })
+  })
+
+  it('计划模式重试后仍无效时返回具体格式错误', async () => {
+    const completeChat = vi.fn(async () =>
+      JSON.stringify({
+        plan: {
+          ...validAiGeneratedPlan,
+          days: [],
+        },
+        type: 'plan_draft',
+      }),
+    )
+    const app = createAiChatApp({ completeChat })
+
+    const response = await app.request('/api/ai/chat', {
+      body: JSON.stringify({
+        messages: [{ content: '帮我生成计划', role: 'user' }],
+        mode: 'plan',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    await expect(response.json()).resolves.toEqual({
+      message: expect.stringContaining('plan.days.length 必须等于 durationDays'),
+    })
+    expect(response.status).toBe(500)
   })
 
   it('计划模式解析完整计划草案', async () => {
