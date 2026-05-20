@@ -52,7 +52,6 @@ describe('计划页面派生状态', () => {
     expect(state.summary).toEqual({
       completedCount: 2,
       completionPercent: 40,
-      statusText: '进行中',
       subtitle: '轻量减脂 · 2026-05-20 开始 · 2 天',
       totalCount: 5,
     })

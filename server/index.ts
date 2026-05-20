@@ -17,6 +17,7 @@ import {
   validateAiPlanResponse,
   type AiChatRequest,
 } from '../shared/ai'
+import { initRagStore, retrieveContext } from './ragService'
 
 /**
  * 创建 AI 聊天服务的基础配置选项接口
@@ -44,13 +45,24 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
     }
 
     try {
+      const userMessage = request.messages.filter(m => m.role === 'user').pop()?.content || ''
+      const ragContext = await retrieveContext(userMessage)
+
       if (request.mode === 'chat') {
-        const content = await completeChat(buildChatMessages(request))
+        const messages = buildChatMessages(request)
+        if (ragContext) {
+          messages.splice(1, 0, { role: 'system', content: `【相关参考资料】（视情况结合参考，不可过度脱离用户原始场景）：\n${ragContext}` })
+        }
+        const content = await completeChat(messages)
 
         return context.json({ content, type: 'message' as const })
       }
 
-      const planResponse = await completePlanResponse(completeChat, buildPlanMessages(request))
+      const messages = buildPlanMessages(request)
+      if (ragContext) {
+        messages.splice(1, 0, { role: 'system', content: `【相关参考资料】（视情况结合参考，不可过度脱离用户原始场景）：\n${ragContext}` })
+      }
+      const planResponse = await completePlanResponse(completeChat, messages)
 
       return context.json(planResponse)
     } catch (error) {
@@ -70,8 +82,13 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
     }
 
     try {
-      const messages =
-        request.mode === 'plan' ? buildPlanSummaryMessages(request) : buildChatMessages(request)
+      const userMessage = request.messages.filter(m => m.role === 'user').pop()?.content || ''
+      const ragContext = await retrieveContext(userMessage)
+
+      let messages = request.mode === 'plan' ? buildPlanSummaryMessages(request) : buildChatMessages(request)
+      if (ragContext) {
+        messages.splice(1, 0, { role: 'system', content: `【相关参考资料】（视情况结合参考，不可过度脱离用户原始场景）：\n${ragContext}` })
+      }
       const stream = createSseStream(completeChatStream(messages))
 
       return new Response(stream, {
@@ -225,6 +242,9 @@ const isDirectRun = () => {
 
 if (isDirectRun()) {
   loadServerEnv()
+
+  // 初始化 RAG 向量存储
+  initRagStore().catch(console.error)
 
   serve({
     fetch: createAiChatApp().fetch,
