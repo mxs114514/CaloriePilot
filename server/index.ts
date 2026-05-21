@@ -11,6 +11,7 @@ import {
 } from './aiClient'
 import { buildChatMessages, buildPlanMessages, buildPlanSummaryMessages } from './prompts'
 import { loadServerEnv } from './env'
+import { getKnowledgeContext as getRagKnowledgeContext } from './rag'
 import {
   isAiPlanDraftResponse,
   isAiPlanNeedsClarificationResponse,
@@ -24,6 +25,7 @@ import {
 interface CreateAiChatAppOptions {
   completeChat?: CompleteChat
   completeChatStream?: CompleteChatStream
+  getKnowledgeContext?: (request: AiChatRequest) => Promise<string>
 }
 
 /**
@@ -35,6 +37,7 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
   const app = new Hono()
   const completeChat = options.completeChat ?? completeOpenAiCompatibleChat
   const completeChatStream = options.completeChatStream ?? completeOpenAiCompatibleChatStream
+  const getKnowledgeContext = options.getKnowledgeContext ?? getKnowledgeContextForRequest
 
   app.post('/api/ai/chat', async context => {
     const request = await readAiChatRequest(context.req)
@@ -44,13 +47,18 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
     }
 
     try {
+      const knowledgeContext = await getSafeKnowledgeContext(getKnowledgeContext, request)
+
       if (request.mode === 'chat') {
-        const content = await completeChat(buildChatMessages(request))
+        const content = await completeChat(buildChatMessages(request, { knowledgeContext }))
 
         return context.json({ content, type: 'message' as const })
       }
 
-      const planResponse = await completePlanResponse(completeChat, buildPlanMessages(request))
+      const planResponse = await completePlanResponse(
+        completeChat,
+        buildPlanMessages(request, { knowledgeContext }),
+      )
 
       return context.json(planResponse)
     } catch (error) {
@@ -70,8 +78,11 @@ export const createAiChatApp = (options: CreateAiChatAppOptions = {}) => {
     }
 
     try {
+      const knowledgeContext = await getSafeKnowledgeContext(getKnowledgeContext, request)
       const messages =
-        request.mode === 'plan' ? buildPlanSummaryMessages(request) : buildChatMessages(request)
+        request.mode === 'plan'
+          ? buildPlanSummaryMessages(request, { knowledgeContext })
+          : buildChatMessages(request, { knowledgeContext })
       const stream = createSseStream(completeChatStream(messages))
 
       return new Response(stream, {
@@ -131,6 +142,28 @@ const readAiChatRequest = async (request: Request): Promise<AiChatRequest | unde
     return body
   } catch {
     return undefined
+  }
+}
+
+const getLatestUserQuestion = (request: AiChatRequest) =>
+  [...request.messages].reverse().find(message => message.role === 'user')?.content
+
+const getKnowledgeContextForRequest = async (request: AiChatRequest) => {
+  const latestUserQuestion = getLatestUserQuestion(request)
+
+  return latestUserQuestion ? getRagKnowledgeContext(latestUserQuestion) : ''
+}
+
+const getSafeKnowledgeContext = async (
+  getKnowledgeContext: (request: AiChatRequest) => Promise<string>,
+  request: AiChatRequest,
+) => {
+  try {
+    return await getKnowledgeContext(request)
+  } catch (error) {
+    console.warn('RAG 知识库检索失败，已降级为普通 AI 回答。', error)
+
+    return ''
   }
 }
 

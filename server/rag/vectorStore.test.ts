@@ -55,6 +55,7 @@ describe('PgVector 知识库向量存储', () => {
       { type: 'OpenAIEmbeddings' },
       expect.objectContaining({
         collectionName: 'knowledge',
+        collectionTableName: 'knowledge_chunks_collections',
         postgresConnectionOptions: {
           connectionString: 'postgresql://user:pass@localhost:5432/db',
         },

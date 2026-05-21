@@ -20,6 +20,7 @@ export const createKnowledgeVectorStore = async () => {
 
   return PGVectorStore.initialize(createEmbeddings(), {
     collectionName,
+    collectionTableName: `${tableName}_collections`,
     postgresConnectionOptions: {
       connectionString,
     },

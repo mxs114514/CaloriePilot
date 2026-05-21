@@ -8,18 +8,37 @@ interface ChatCompletionMessage {
   role: 'assistant' | 'system' | 'user'
 }
 
+interface BuildPromptOptions {
+  knowledgeContext?: string
+}
+
+const buildKnowledgeContextText = (options?: BuildPromptOptions, isPlanPrompt = false) =>
+  options?.knowledgeContext
+    ? [
+        '如提供知识库上下文，请优先基于知识库回答；如果知识库没有覆盖，必须明确说明未在知识库中检索到直接依据。',
+        isPlanPrompt ? '知识库只作为饮食和运动原则参考，最终仍必须严格返回指定 JSON 结构。' : '',
+        options.knowledgeContext,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : ''
+
 /**
  * 构建用于常规“聊天交互”场景下的完整对话上下文
  * AI在其中被赋予健康计划助手的身份，同时接收用户的身高体重数据、当前计划和历史记录背景
  * @param request 包含用户资料、计划、历史记录及聊天内容的请求对象
  * @returns 组装系统 prompt 及用户对话后生成的消息数组
  */
-export const buildChatMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
+export const buildChatMessages = (
+  request: AiChatRequest,
+  options?: BuildPromptOptions,
+): ChatCompletionMessage[] => [
   {
     content: [
       '你是 CaloriePilot 的健康计划助手。',
       '请基于用户资料、当前计划和最近历史，用中文给出简洁、可执行的建议。',
       '不要提供医疗诊断；遇到疾病、用药、严重不适时建议咨询专业医生。',
+      buildKnowledgeContextText(options),
       buildContextText(request),
     ].join('\n'),
     role: 'system',
@@ -36,7 +55,10 @@ export const buildChatMessages = (request: AiChatRequest): ChatCompletionMessage
  * @param request AI请求参数
  * @returns 用于生成完整计划的消息数组
  */
-export const buildPlanMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
+export const buildPlanMessages = (
+  request: AiChatRequest,
+  options?: BuildPromptOptions,
+): ChatCompletionMessage[] => [
   {
     content: [
       '你是 CaloriePilot 的健身和饮食计划生成助手。',
@@ -53,6 +75,7 @@ export const buildPlanMessages = (request: AiChatRequest): ChatCompletionMessage
       '如果 durationDays 大于 1，必须生成完整的 days 数组，days.length 必须等于 durationDays；不能只返回第 1 天，不能用省略号，不能用示例代替完整内容。',
       '数值和长度规则：durationDays 为 1 到 30 的整数；meal.calories 为 50 到 2000 的整数；workout.durationMinutes 为 1 到 300 的整数；workout.caloriesBurned 为 1 到 2000 的整数；title 不超过 40 字，goal 不超过 20 字，餐食和运动标题不超过 30 字，说明不超过 120 字。',
       '如果上下文包含 draftPlan，必须基于原草案和用户最新要求重新返回完整 AiGeneratedPlan，不要返回局部 patch；用户没要求修改的部分严格不动。',
+      buildKnowledgeContextText(options, true),
       buildContextText(request),
       request.draftPlan ? `当前未保存计划草案：${JSON.stringify(request.draftPlan)}` : '',
     ].join('\n'),
@@ -71,13 +94,17 @@ export const buildPlanMessages = (request: AiChatRequest): ChatCompletionMessage
  * @param request AI请求参数
  * @returns 用于生成文字摘要的消息数组
  */
-export const buildPlanSummaryMessages = (request: AiChatRequest): ChatCompletionMessage[] => [
+export const buildPlanSummaryMessages = (
+  request: AiChatRequest,
+  options?: BuildPromptOptions,
+): ChatCompletionMessage[] => [
   {
     content: [
       '你是 CaloriePilot 的健身和饮食计划生成助手。',
       '请先返回一段给用户看的计划摘要，用中文简短说明计划方向、饮食重点和运动重点。',
       '摘要只用于聊天预览，不保存到详细计划。',
       '不要返回 JSON，不要包裹 Markdown 代码块，不要列出完整每日计划。',
+      buildKnowledgeContextText(options),
       buildContextText(request),
       request.draftPlan ? `当前未保存计划草案：${JSON.stringify(request.draftPlan)}` : '',
     ].join('\n'),

@@ -84,6 +84,30 @@ describe('AI 对话后端接口', () => {
     expect(response.status).toBe(200)
   })
 
+  it('普通聊天调用 RAG 并注入上下文', async () => {
+    const completeChat = vi.fn(async () => '可以从晚餐少油开始。')
+    const getKnowledgeContext = vi.fn(async () => '知识库检索结果：晚餐少油。')
+    const app = createAiChatApp({
+      completeChat,
+      getKnowledgeContext,
+    })
+
+    await app.request('/api/ai/chat', {
+      body: JSON.stringify({
+        messages: [{ content: '怎么减脂？', role: 'user' }],
+        mode: 'chat',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    expect(getKnowledgeContext).toHaveBeenCalledWith({
+      messages: [{ content: '怎么减脂？', role: 'user' }],
+      mode: 'chat',
+    })
+    expect(completeChat.mock.calls[0]?.[0][0]?.content).toContain('知识库检索结果：晚餐少油。')
+  })
+
   it('计划模式调用时启用 JSON Output', async () => {
     const completeChat = vi.fn(async () =>
       JSON.stringify({
@@ -106,6 +130,54 @@ describe('AI 对话后端接口', () => {
       maxTokens: 8192,
       responseFormat: 'json_object',
     })
+  })
+
+  it('计划模式调用 RAG 并注入上下文', async () => {
+    const completeChat = vi.fn(async () =>
+      JSON.stringify({
+        plan: validAiGeneratedPlan,
+        type: 'plan_draft',
+      }),
+    )
+    const getKnowledgeContext = vi.fn(async () => '知识库检索结果：计划原则。')
+    const app = createAiChatApp({ completeChat, getKnowledgeContext })
+
+    await app.request('/api/ai/chat', {
+      body: JSON.stringify({
+        messages: [{ content: '帮我生成计划', role: 'user' }],
+        mode: 'plan',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    expect(getKnowledgeContext).toHaveBeenCalledOnce()
+    expect(completeChat.mock.calls[0]?.[0][0]?.content).toContain('知识库检索结果：计划原则。')
+  })
+
+  it('RAG 抛错时仍继续普通 AI 请求', async () => {
+    const completeChat = vi.fn(async () => '普通回答')
+    const app = createAiChatApp({
+      completeChat,
+      getKnowledgeContext: async () => {
+        throw new Error('rag down')
+      },
+    })
+
+    const response = await app.request('/api/ai/chat', {
+      body: JSON.stringify({
+        messages: [{ content: '怎么减脂？', role: 'user' }],
+        mode: 'chat',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    await expect(response.json()).resolves.toEqual({
+      content: '普通回答',
+      type: 'message',
+    })
+    expect(completeChat).toHaveBeenCalledOnce()
   })
 
   it('计划模式首次返回格式无效时会带错误原因重试一次', async () => {
@@ -256,6 +328,32 @@ describe('AI 对话后端接口', () => {
     )
     expect(response.headers.get('content-type')).toContain('text/event-stream')
     expect(response.status).toBe(200)
+  })
+
+  it('普通聊天 SSE 流式响应注入 RAG 上下文', async () => {
+    let receivedMessages: Array<{ content: string; role: string }> = []
+    const getKnowledgeContext = vi.fn(async () => '知识库检索结果：流式依据。')
+    const app = createAiChatApp({
+      completeChat: async () => '不会调用',
+      completeChatStream: async function* (messages) {
+        receivedMessages = messages
+        yield '第一段'
+      },
+      getKnowledgeContext,
+    })
+
+    const response = await app.request('/api/ai/chat/stream', {
+      body: JSON.stringify({
+        messages: [{ content: '流式测试', role: 'user' }],
+        mode: 'chat',
+      }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+
+    await response.text()
+    expect(getKnowledgeContext).toHaveBeenCalledOnce()
+    expect(receivedMessages[0]?.content).toContain('知识库检索结果：流式依据。')
   })
 
   it('计划模式支持先返回 SSE 摘要', async () => {

@@ -24,6 +24,7 @@ export interface PlanPageViewState {
   summary: {
     completedCount: number
     completionPercent: number
+    statusText: string
     subtitle: string
     totalCount: number
   }
@@ -45,6 +46,7 @@ export const buildPlanPageViewState = (plan: SavedAiPlan): PlanPageViewState => 
     summary: {
       completedCount: stats.completedCount,
       completionPercent: Math.round(stats.completionRate * 100),
+      statusText: formatPlanStatus(plan.status),
       subtitle: `${plan.goal} · ${plan.startDate} 开始 · ${plan.durationDays} 天`,
       totalCount: stats.totalCount,
     },
@@ -82,6 +84,14 @@ export const formatMealType = (mealType: SavedMealType) => {
   if (mealType === 'dinner') return '晚餐'
 
   return '加餐'
+}
+
+const formatPlanStatus = (status: SavedAiPlan['status']) => {
+  if (status === 'pending') return '待开始'
+  if (status === 'completed') return '已完成'
+  if (status === 'archived') return '已归档'
+
+  return '进行中'
 }
 
 export const updateMealCompletionInPlan = (
