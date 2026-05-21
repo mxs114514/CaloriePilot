@@ -49,6 +49,25 @@ describe('知识库导入脚本', () => {
     expect(log).toHaveBeenCalledWith('知识库导入完成，共写入 120 个文本块。')
   })
 
+  it('默认每批最多写入 10 个 chunks，兼容 embedding 服务批量上限', async () => {
+    const chunks = Array.from({ length: 25 }, (_, index) => makeDocument(index))
+    const addDocuments = vi.fn()
+
+    await importKnowledge({
+      clearCollection: vi.fn(),
+      createVectorStore: vi.fn().mockResolvedValue({ addDocuments }),
+      loadDocuments: vi.fn().mockResolvedValue([makeDocument(0)]),
+      log: vi.fn(),
+      splitDocuments: vi.fn().mockResolvedValue(chunks),
+    })
+
+    expect(addDocuments.mock.calls.map(([batch]) => batch)).toEqual([
+      chunks.slice(0, 10),
+      chunks.slice(10, 20),
+      chunks.slice(20, 25),
+    ])
+  })
+
   it('写入前清理当前 collection，避免重复导入', async () => {
     const clearCollection = vi.fn()
 
@@ -61,5 +80,30 @@ describe('知识库导入脚本', () => {
     })
 
     expect(clearCollection).toHaveBeenCalledOnce()
+  })
+
+  it('首次导入时先初始化向量存储表，再清理当前 collection', async () => {
+    const calls: string[] = []
+    const addDocuments = vi.fn().mockImplementation(() => {
+      calls.push('addDocuments')
+    })
+    const clearCollection = vi.fn().mockImplementation(() => {
+      calls.push('clearCollection')
+    })
+    const createVectorStore = vi.fn().mockImplementation(() => {
+      calls.push('createVectorStore')
+
+      return { addDocuments }
+    })
+
+    await importKnowledge({
+      clearCollection,
+      createVectorStore,
+      loadDocuments: vi.fn().mockResolvedValue([makeDocument(0)]),
+      log: vi.fn(),
+      splitDocuments: vi.fn().mockResolvedValue([makeDocument(0)]),
+    })
+
+    expect(calls).toEqual(['createVectorStore', 'clearCollection', 'addDocuments'])
   })
 })

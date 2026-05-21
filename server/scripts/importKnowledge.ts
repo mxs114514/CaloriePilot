@@ -49,7 +49,7 @@ export const clearKnowledgeCollection = async () => {
 }
 
 export const importKnowledge = async ({
-  batchSize = 50,
+  batchSize = 10,
   clearCollection = clearKnowledgeCollection,
   createVectorStore = createKnowledgeVectorStore,
   loadDocuments = loadKnowledgeDocuments,
@@ -72,8 +72,8 @@ export const importKnowledge = async ({
     return
   }
 
-  await clearCollection()
   const vectorStore = await createVectorStore()
+  await clearCollection()
 
   for (let index = 0; index < chunks.length; index += batchSize) {
     await vectorStore.addDocuments(chunks.slice(index, index + batchSize))
