@@ -1,5 +1,7 @@
 import OpenAI from 'openai'
 
+import { getAiRuntimeConfig } from './aiConfig'
+
 /**
  * AI 聊天消息接口定义
  */
@@ -46,7 +48,7 @@ export type CompleteChatStream = (messages: ChatCompletionMessage[]) => AsyncIte
  * @returns AI 回复的完整字符串内容
  */
 export const completeOpenAiCompatibleChat: CompleteChat = async (messages, options) => {
-  const { apiKey, baseUrl, model } = getAiConfig()
+  const { apiKey, baseUrl, model } = getAiRuntimeConfig()
   const requestBody: Record<string, unknown> = {
     messages,
     model,
@@ -95,7 +97,7 @@ export const completeOpenAiCompatibleChat: CompleteChat = async (messages, optio
  * @returns 包含流式文字块的 AsyncIterable 对象
  */
 export const completeOpenAiCompatibleChatStream: CompleteChatStream = async function* (messages) {
-  const { apiKey, baseUrl, model } = getAiConfig()
+  const { apiKey, baseUrl, model } = getAiRuntimeConfig()
   const openai = new OpenAI({
     apiKey,
     baseURL: baseUrl,
@@ -114,26 +116,5 @@ export const completeOpenAiCompatibleChatStream: CompleteChatStream = async func
     if (delta) {
       yield delta
     }
-  }
-}
-
-/**
- * 获取并校验 AI 服务所需的配置环境变量
- * @returns 包含 apiKey、baseUrl 和 model 的配置对象
- * @throws 缺少必要环境变量时抛出相应提示的 AiClientError
- */
-const getAiConfig = () => {
-  const baseUrl = process.env.AI_API_BASE_URL
-  const apiKey = process.env.AI_API_KEY
-  const model = process.env.AI_MODEL
-
-  if (!baseUrl || !apiKey || !model) {
-    throw new AiClientError('AI 服务未配置，请先填写 AI_API_BASE_URL、AI_API_KEY 和 AI_MODEL。')
-  }
-
-  return {
-    apiKey,
-    baseUrl,
-    model,
   }
 }

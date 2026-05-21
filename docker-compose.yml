@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: calorie-pilot-postgres
+    environment:
+      POSTGRES_DB: calorie_pilot
+      POSTGRES_USER: calorie_pilot
+      POSTGRES_PASSWORD: calorie_pilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - calorie-pilot-postgres-data:/var/lib/postgresql/data
+      - ./server/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+volumes:
+  calorie-pilot-postgres-data:

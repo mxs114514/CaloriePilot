@@ -7,6 +7,7 @@ describe('OpenAI 兼容 AI 客户端', () => {
     vi.stubEnv('AI_API_BASE_URL', 'https://api.deepseek.com')
     vi.stubEnv('AI_API_KEY', 'test-key')
     vi.stubEnv('AI_MODEL', 'deepseek-v4-pro')
+    vi.stubEnv('AI_EMBEDDING_MODEL', 'embedding-model')
   })
 
   afterEach(() => {
