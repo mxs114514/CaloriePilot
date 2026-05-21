@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { ChatOpenAI } from '@langchain/openai'
 
 import { getAiRuntimeConfig } from './aiConfig'
 
@@ -41,6 +41,61 @@ export type CompleteChat = (
  */
 export type CompleteChatStream = (messages: ChatCompletionMessage[]) => AsyncIterable<string>
 
+const createChatModel = (options?: CompleteChatOptions) => {
+  const { apiKey, baseUrl, model } = getAiRuntimeConfig()
+
+  return new ChatOpenAI({
+    apiKey,
+    configuration: {
+      baseURL: baseUrl.replace(/\/$/, ''),
+    },
+    model,
+    ...(typeof options?.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
+    ...(options?.responseFormat
+      ? { modelKwargs: { response_format: { type: options.responseFormat } } }
+      : {}),
+    streamUsage: false,
+    temperature: 0.4,
+  })
+}
+
+const extractTextContent = (content: unknown) => {
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === 'string') {
+          return item
+        }
+
+        if (
+          item &&
+          typeof item === 'object' &&
+          'text' in item &&
+          typeof item.text === 'string'
+        ) {
+          return item.text
+        }
+
+        return ''
+      })
+      .join('')
+  }
+
+  return ''
+}
+
+const toAiClientError = (error: unknown) => {
+  if (error instanceof AiClientError) {
+    return error
+  }
+
+  return new AiClientError('AI 服务调用失败，请检查模型配置或稍后重试。')
+}
+
 /**
  * 调用兼容 OpenAI 格式 API 的无流式对话补全方法
  * 发送请求以获取单次完整的 AI 回复
@@ -48,40 +103,11 @@ export type CompleteChatStream = (messages: ChatCompletionMessage[]) => AsyncIte
  * @returns AI 回复的完整字符串内容
  */
 export const completeOpenAiCompatibleChat: CompleteChat = async (messages, options) => {
-  const { apiKey, baseUrl, model } = getAiRuntimeConfig()
-  const requestBody: Record<string, unknown> = {
-    messages,
-    model,
-    temperature: 0.4,
-  }
-
-  if (options?.responseFormat) {
-    requestBody.response_format = { type: options.responseFormat }
-  }
-
-  if (typeof options?.maxTokens === 'number') {
-    requestBody.max_tokens = options.maxTokens
-  }
-
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    body: JSON.stringify(requestBody),
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      'content-type': 'application/json',
-    },
-    method: 'POST',
-  }).catch(() => {
-    throw new AiClientError('AI 服务网络请求失败，请稍后重试。')
+  const model = createChatModel(options)
+  const response = await model.invoke(messages).catch((error: unknown) => {
+    throw toAiClientError(error)
   })
-
-  if (!response.ok) {
-    throw new AiClientError('AI 服务调用失败，请检查模型配置或稍后重试。', response.status)
-  }
-
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-  const content = data.choices?.[0]?.message?.content
+  const content = extractTextContent(response.content)
 
   if (!content) {
     throw new AiClientError('AI 服务返回内容为空，请稍后重试。')
@@ -97,24 +123,20 @@ export const completeOpenAiCompatibleChat: CompleteChat = async (messages, optio
  * @returns 包含流式文字块的 AsyncIterable 对象
  */
 export const completeOpenAiCompatibleChatStream: CompleteChatStream = async function* (messages) {
-  const { apiKey, baseUrl, model } = getAiRuntimeConfig()
-  const openai = new OpenAI({
-    apiKey,
-    baseURL: baseUrl,
+  const model = createChatModel()
+  const stream = await model.stream(messages).catch((error: unknown) => {
+    throw toAiClientError(error)
   })
 
-  const stream = await openai.chat.completions.create({
-    messages,
-    model,
-    stream: true,
-    temperature: 0.4,
-  })
+  try {
+    for await (const chunk of stream) {
+      const delta = extractTextContent(chunk.content)
 
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content
-
-    if (delta) {
-      yield delta
+      if (delta) {
+        yield delta
+      }
     }
+  } catch (error) {
+    throw toAiClientError(error)
   }
 }
