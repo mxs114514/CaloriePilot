@@ -1,17 +1,17 @@
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector'
 import { OpenAIEmbeddings } from '@langchain/openai'
 
-import { getAiRuntimeConfig, getRagRuntimeConfig } from '../aiConfig'
+import { getEmbeddingRuntimeConfig, getRagRuntimeConfig } from '../aiConfig'
 
 export const createEmbeddings = () => {
-  const { apiKey, baseUrl, embeddingModel } = getAiRuntimeConfig()
+  const { apiKey, baseUrl, model } = getEmbeddingRuntimeConfig()
 
   return new OpenAIEmbeddings({
     apiKey,
     configuration: {
       baseURL: baseUrl.replace(/\/$/, ''),
     },
-    model: embeddingModel,
+    model,
   })
 }
 

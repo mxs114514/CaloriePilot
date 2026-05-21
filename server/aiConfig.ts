@@ -4,18 +4,32 @@ export const getAiRuntimeConfig = () => {
   const baseUrl = process.env.AI_API_BASE_URL
   const apiKey = process.env.AI_API_KEY
   const model = process.env.AI_MODEL
-  const embeddingModel = process.env.AI_EMBEDDING_MODEL
 
-  if (!baseUrl || !apiKey || !model || !embeddingModel) {
+  if (!baseUrl || !apiKey || !model) {
+    throw new AiClientError('AI 服务未配置，请先填写 AI_API_BASE_URL、AI_API_KEY 和 AI_MODEL。')
+  }
+
+  return {
+    apiKey,
+    baseUrl,
+    model,
+  }
+}
+
+export const getEmbeddingRuntimeConfig = () => {
+  const baseUrl = process.env.AI_EMBEDDING_API_BASE_URL || process.env.AI_API_BASE_URL
+  const apiKey = process.env.AI_EMBEDDING_API_KEY || process.env.AI_API_KEY
+  const model = process.env.AI_EMBEDDING_MODEL
+
+  if (!baseUrl || !apiKey || !model) {
     throw new AiClientError(
-      'AI 服务未配置，请先填写 AI_API_BASE_URL、AI_API_KEY、AI_MODEL 和 AI_EMBEDDING_MODEL。',
+      'Embedding 服务未配置，请先填写 AI_EMBEDDING_MODEL；如 embedding 与聊天模型不在同一平台，还需填写 AI_EMBEDDING_API_BASE_URL 和 AI_EMBEDDING_API_KEY。',
     )
   }
 
   return {
     apiKey,
     baseUrl,
-    embeddingModel,
     model,
   }
 }

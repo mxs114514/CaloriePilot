@@ -8,6 +8,8 @@
 AI_API_BASE_URL=https://your-openai-compatible-endpoint/v1
 AI_API_KEY=your-api-key
 AI_MODEL=your-chat-model
+AI_EMBEDDING_API_BASE_URL=https://your-embedding-openai-compatible-endpoint/v1
+AI_EMBEDDING_API_KEY=your-embedding-api-key
 AI_EMBEDDING_MODEL=your-embedding-model
 PGVECTOR_CONNECTION_STRING=postgresql://calorie_pilot:calorie_pilot@localhost:5432/calorie_pilot
 PGVECTOR_TABLE_NAME=calorie_pilot_knowledge_chunks
@@ -15,7 +17,24 @@ PGVECTOR_COLLECTION_NAME=calorie_pilot_knowledge
 RAG_K=5
 ```
 
-`AI_MODEL` 用于聊天和计划生成；`AI_EMBEDDING_MODEL` 用于 PDF 文本向量化。两个模型可以来自同一个 OpenAI 兼容服务，但该服务必须同时支持聊天补全和 embedding。
+`AI_MODEL` 用于聊天和计划生成；`AI_EMBEDDING_MODEL` 用于 PDF 文本向量化。聊天模型和 embedding 模型可以来自不同平台，例如 DeepSeek 负责聊天，阿里千问负责 embedding。
+
+如果聊天和 embedding 来自同一平台，可以不填 `AI_EMBEDDING_API_BASE_URL` 和 `AI_EMBEDDING_API_KEY`，程序会回退使用 `AI_API_BASE_URL` 和 `AI_API_KEY`。如果来自不同平台，必须填写独立的 embedding 地址和 key。
+
+DeepSeek 聊天 + 阿里千问 embedding 示例：
+
+```text
+AI_API_BASE_URL=https://api.deepseek.com/v1
+AI_API_KEY=你的 DeepSeek API Key
+AI_MODEL=deepseek-chat
+AI_EMBEDDING_API_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+AI_EMBEDDING_API_KEY=你的阿里云百炼 API Key
+AI_EMBEDDING_MODEL=text-embedding-v4
+PGVECTOR_CONNECTION_STRING=postgresql://calorie_pilot:calorie_pilot@localhost:5432/calorie_pilot
+PGVECTOR_TABLE_NAME=calorie_pilot_knowledge_chunks
+PGVECTOR_COLLECTION_NAME=calorie_pilot_knowledge
+RAG_K=5
+```
 
 ## 启动数据库
 

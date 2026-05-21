@@ -23,10 +23,12 @@ import { createEmbeddings, createKnowledgeVectorStore } from './vectorStore'
 
 describe('PgVector 知识库向量存储', () => {
   beforeEach(() => {
-    vi.stubEnv('AI_API_BASE_URL', 'https://api.example.com/v1/')
-    vi.stubEnv('AI_API_KEY', 'test-key')
-    vi.stubEnv('AI_MODEL', 'chat-model')
-    vi.stubEnv('AI_EMBEDDING_MODEL', 'embedding-model')
+    vi.stubEnv('AI_API_BASE_URL', 'https://deepseek.example.com/v1/')
+    vi.stubEnv('AI_API_KEY', 'deepseek-key')
+    vi.stubEnv('AI_MODEL', 'deepseek-chat')
+    vi.stubEnv('AI_EMBEDDING_API_BASE_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1/')
+    vi.stubEnv('AI_EMBEDDING_API_KEY', 'qwen-key')
+    vi.stubEnv('AI_EMBEDDING_MODEL', 'text-embedding-v4')
     vi.stubEnv('PGVECTOR_CONNECTION_STRING', 'postgresql://user:pass@localhost:5432/db')
     vi.stubEnv('PGVECTOR_TABLE_NAME', 'knowledge_chunks')
     vi.stubEnv('PGVECTOR_COLLECTION_NAME', 'knowledge')
@@ -38,11 +40,11 @@ describe('PgVector 知识库向量存储', () => {
     createEmbeddings()
 
     expect(vectorStoreMock.embeddingsOptions[0]).toMatchObject({
-      apiKey: 'test-key',
+      apiKey: 'qwen-key',
       configuration: {
-        baseURL: 'https://api.example.com/v1',
+        baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       },
-      model: 'embedding-model',
+      model: 'text-embedding-v4',
     })
   })
 
